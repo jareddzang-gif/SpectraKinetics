@@ -8,7 +8,7 @@ import os
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="SpectraKinetics",
+    page_title="APIES Dashboard",
     page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -353,8 +353,8 @@ with st.sidebar:
 st.markdown("""
 <div class="hero">
   <div class="nbl-badge">NBL</div>
-  <h1>🔬 SpectraKinetics</h1>
-  <p>Fluorescence spectroscopy analysis · Excitation 280 nm · Emission 249–800 nm</p>
+  <h1>APIES Dashboard</h1>
+  <p>Absorbance · Polarized Intrinsic Emission · Scattering</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -410,7 +410,7 @@ tags_html = "".join(
 st.markdown(f'<div style="margin-bottom:1.5rem;">{tags_html}</div>', unsafe_allow_html=True)
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab_kinetics, tab_spectra, tab_data = st.tabs(["📈 Kinetics", "🌈 Spectra", "🗃 Raw Data"])
+tab_kinetics, tab_spectra, tab_analysis, tab_data = st.tabs(["📈 Kinetics", "🌈 Spectra", "🧪 Spectral Analysis", "🗃 Raw Data"])
 
 # ── KINETICS TAB ──────────────────────────────────────────────────────────────
 with tab_kinetics:
