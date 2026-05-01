@@ -17,58 +17,60 @@ st.set_page_config(
 # ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
 
 :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --surface2: #21262d;
-    --border: #30363d;
-    --accent: #00d4aa;
-    --accent2: #7c3aed;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --danger: #f85149;
-    --warn: #d29922;
+    --bg: #f4f6f9;
+    --surface: #ffffff;
+    --surface2: #eef1f5;
+    --border: #d0d7e2;
+    --accent: #0e6b8c;
+    --accent-light: #e0f3f9;
+    --accent2: #0a9e7a;
+    --text: #1a2332;
+    --muted: #5a6a7e;
+    --danger: #c0392b;
+    --warn: #e67e22;
+    --shadow: 0 1px 4px rgba(14,107,140,0.08), 0 2px 12px rgba(14,107,140,0.06);
 }
 
 html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
     background-color: var(--bg);
     color: var(--text);
 }
 
 .stApp { background-color: var(--bg); }
 
-h1, h2, h3 { font-family: 'Space Mono', monospace; }
+h1, h2, h3 { font-family: 'Inter', sans-serif; font-weight: 600; color: var(--text); }
 
 .hero {
-    background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d2137 100%);
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    background: linear-gradient(120deg, #0e6b8c 0%, #0a5a78 60%, #0a9e7a 100%);
+    border-radius: 14px;
     padding: 2rem 2.5rem;
     margin-bottom: 1.5rem;
+    box-shadow: 0 4px 24px rgba(14,107,140,0.18);
     position: relative;
-    overflow: hidden;
-}
-.hero::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    right: -20%;
-    width: 400px;
-    height: 400px;
-    background: radial-gradient(circle, rgba(0,212,170,0.08) 0%, transparent 70%);
-    pointer-events: none;
 }
 .hero h1 {
-    font-size: 1.8rem;
+    font-size: 1.75rem;
     margin: 0 0 0.3rem 0;
-    background: linear-gradient(90deg, var(--accent), #60efff);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #ffffff;
+    font-weight: 700;
+    letter-spacing: -0.02em;
 }
-.hero p { color: var(--muted); margin: 0; font-size: 0.95rem; }
+.hero p { color: rgba(255,255,255,0.8); margin: 0; font-size: 0.95rem; }
+.nbl-badge {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.75rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #0a2a4a;
+    letter-spacing: 0.18em;
+    opacity: 0.85;
+}
 
 .card {
     background: var(--surface);
@@ -76,27 +78,30 @@ h1, h2, h3 { font-family: 'Space Mono', monospace; }
     border-radius: 10px;
     padding: 1.25rem 1.5rem;
     margin-bottom: 1rem;
+    box-shadow: var(--shadow);
 }
 .card-title {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.75rem;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);
     margin-bottom: 0.75rem;
 }
 
-.stat-row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.stat-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .stat {
-    background: var(--surface2);
+    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.6rem 1rem;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
     flex: 1;
     min-width: 120px;
+    box-shadow: var(--shadow);
 }
-.stat-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
-.stat-value { font-family: 'Space Mono', monospace; font-size: 1rem; color: var(--accent); font-weight: 700; }
+.stat-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; margin-bottom: 0.2rem; }
+.stat-value { font-family: 'IBM Plex Mono', monospace; font-size: 1rem; color: var(--accent); font-weight: 600; }
 
 .file-tag {
     display: inline-block;
@@ -104,66 +109,63 @@ h1, h2, h3 { font-family: 'Space Mono', monospace; }
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.2rem 0.6rem;
-    font-family: 'Space Mono', monospace;
+    font-family: 'IBM Plex Mono', monospace;
     font-size: 0.72rem;
     color: var(--muted);
     margin: 0.15rem;
 }
-.file-tag.active { border-color: var(--accent); color: var(--accent); }
+.file-tag.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+}
 
 .stButton > button {
-    background: linear-gradient(135deg, var(--accent), #00b894) !important;
-    color: #0d1117 !important;
+    background: var(--accent) !important;
+    color: #ffffff !important;
     border: none !important;
     border-radius: 8px !important;
-    font-family: 'Space Mono', monospace !important;
-    font-size: 0.8rem !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.05em !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
     padding: 0.5rem 1.2rem !important;
-    transition: all 0.2s !important;
+    transition: all 0.15s !important;
+    box-shadow: 0 2px 8px rgba(14,107,140,0.2) !important;
 }
 .stButton > button:hover {
+    background: #0a5a78 !important;
     transform: translateY(-1px) !important;
-    box-shadow: 0 4px 20px rgba(0,212,170,0.35) !important;
+    box-shadow: 0 4px 16px rgba(14,107,140,0.3) !important;
 }
-
-.stTextInput > div > div > input,
-.stNumberInput > div > div > input,
-.stSelectbox > div > div {
-    background-color: var(--surface2) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 8px !important;
-    color: var(--text) !important;
-    font-family: 'DM Sans', sans-serif !important;
-}
-
-.stSlider > div { color: var(--accent) !important; }
 
 [data-testid="stSidebar"] {
     background-color: var(--surface) !important;
     border-right: 1px solid var(--border) !important;
 }
-[data-testid="stSidebar"] .stMarkdown { color: var(--text); }
-
-.highlight-row {
-    background: rgba(0,212,170,0.08);
-    border-left: 3px solid var(--accent);
-    padding: 0.4rem 0.8rem;
-    border-radius: 0 6px 6px 0;
-    margin: 0.3rem 0;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.82rem;
-}
-
-.status-ok { color: var(--accent); }
-.status-warn { color: var(--warn); }
-.status-err { color: var(--danger); }
 
 div[data-testid="stExpander"] {
     background: var(--surface) !important;
     border: 1px solid var(--border) !important;
     border-radius: 8px !important;
+}
+
+.stTabs [data-baseweb="tab-list"] {
+    background: var(--surface2) !important;
+    border-radius: 8px !important;
+    padding: 3px !important;
+    gap: 2px !important;
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius: 6px !important;
+    color: var(--muted) !important;
+    font-weight: 500 !important;
+}
+.stTabs [aria-selected="true"] {
+    background: var(--surface) !important;
+    color: var(--accent) !important;
+    font-weight: 600 !important;
+    box-shadow: var(--shadow) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -350,6 +352,7 @@ with st.sidebar:
 # ── Main ──────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="hero">
+  <div class="nbl-badge">NBL</div>
   <h1>🔬 SpectraKinetics</h1>
   <p>Fluorescence spectroscopy analysis · Excitation 280 nm · Emission 249–800 nm</p>
 </div>
@@ -451,22 +454,22 @@ with tab_kinetics:
         fig.add_vline(
             x=t_actual_spec,
             line_dash="dash",
-            line_color="#7c3aed",
+            line_color="#0a9e7a",
             annotation_text=f"t={t_actual_spec:.1f}s",
-            annotation_font_color="#7c3aed",
+            annotation_font_color="#0a9e7a",
         )
 
         fig.update_layout(
-            template="plotly_dark",
+            template="plotly_white",
             paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(13,17,23,0.8)",
+            plot_bgcolor="#ffffff",
             title=dict(
                 text=f"Kinetics at λ = {wl_actual:.2f} nm (Ex 280 nm)",
-                font=dict(family="Space Mono", size=14, color="#00d4aa"),
+                font=dict(family="Inter", size=14, color="#0e6b8c"),
             ),
-            xaxis=dict(title="Time (s)", gridcolor="#21262d", linecolor="#30363d"),
-            yaxis=dict(title="Intensity (a.u.)", gridcolor="#21262d", linecolor="#30363d"),
-            legend=dict(bgcolor="rgba(22,27,34,0.8)", bordercolor="#30363d", borderwidth=1),
+            xaxis=dict(title="Time (s)", gridcolor="#eef1f5", linecolor="#d0d7e2", tickfont=dict(color="#5a6a7e")),
+            yaxis=dict(title="Intensity (a.u.)", gridcolor="#eef1f5", linecolor="#d0d7e2", tickfont=dict(color="#5a6a7e")),
+            legend=dict(bgcolor="rgba(255,255,255,0.9)", bordercolor="#d0d7e2", borderwidth=1),
             margin=dict(t=50, b=40, l=50, r=20),
             hovermode="x unified",
         )
@@ -533,22 +536,22 @@ with tab_spectra:
         fig2.add_vline(
             x=wl_actual,
             line_dash="dot",
-            line_color="#00d4aa",
+            line_color="#0e6b8c",
             annotation_text=f"λ={wl_actual:.1f}nm",
-            annotation_font_color="#00d4aa",
+            annotation_font_color="#0e6b8c",
         )
 
         fig2.update_layout(
-            template="plotly_dark",
+            template="plotly_white",
             paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(13,17,23,0.8)",
+            plot_bgcolor="#ffffff",
             title=dict(
                 text="Emission Spectra (Ex 280 nm)",
-                font=dict(family="Space Mono", size=14, color="#00d4aa"),
+                font=dict(family="Inter", size=14, color="#0e6b8c"),
             ),
-            xaxis=dict(title="Emission Wavelength (nm)", gridcolor="#21262d", linecolor="#30363d"),
-            yaxis=dict(title="Intensity (a.u.)", gridcolor="#21262d", linecolor="#30363d"),
-            legend=dict(bgcolor="rgba(22,27,34,0.8)", bordercolor="#30363d", borderwidth=1),
+            xaxis=dict(title="Emission Wavelength (nm)", gridcolor="#eef1f5", linecolor="#d0d7e2", tickfont=dict(color="#5a6a7e")),
+            yaxis=dict(title="Intensity (a.u.)", gridcolor="#eef1f5", linecolor="#d0d7e2", tickfont=dict(color="#5a6a7e")),
+            legend=dict(bgcolor="rgba(255,255,255,0.9)", bordercolor="#d0d7e2", borderwidth=1),
             margin=dict(t=50, b=40, l=50, r=20),
         )
 
