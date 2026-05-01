@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
 import os
+import io
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -830,7 +831,150 @@ with tab_data:
 
     wl_mask = (wavelengths >= wl_from) & (wavelengths <= wl_to)
     sub = intensity.loc[wavelengths[wl_mask], times[::int(t_stride)]]
-    st.dataframe(sub.style.background_gradient(cmap="viridis"), use_container_width=True, height=400)
+    st.dataframe(sub.style.background_gradient(cmap="Blues"), use_container_width=True, height=400)
 
-    csv = sub.to_csv().encode("utf-8")
-    st.download_button("⬇ Download filtered data as CSV", csv, "filtered_data.csv", "text/csv")
+    st.divider()
+
+    # ── EXCEL EXPORT ──────────────────────────────────────────────────────────
+    st.markdown('<div class="card-title">📥 Export to Excel</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="color:var(--muted); font-size:0.85rem; margin-bottom:1rem;">
+    Generates a single <strong>.xlsx</strong> workbook with one sheet per analysis type —
+    ready to open directly in Excel.
+    </div>
+    """, unsafe_allow_html=True)
+
+    export_fname = st.text_input("Output filename", value=f"{st.session_state.active_file.replace('.txt','').replace('.tsv','')}_analysis")
+
+    col_ex1, col_ex2 = st.columns(2)
+    with col_ex1:
+        include_raw       = st.checkbox("Raw intensity matrix",     value=True)
+        include_kinetics  = st.checkbox("Kinetics trace",           value=True)
+        include_spectra   = st.checkbox("Spectra snapshot",         value=True)
+    with col_ex2:
+        include_irif      = st.checkbox("IR/IF ratio over time",    value=True)
+        include_pie       = st.checkbox("I350/I330 ratio over time", value=True)
+        include_summary   = st.checkbox("Summary sheet",            value=True)
+
+    def build_excel():
+        buf = io.BytesIO()
+        analysis_mask_ex = (times >= t_start) & (times <= t_end)
+
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+
+            # ── Sheet 1: Summary ──────────────────────────────────────────
+            if include_summary:
+                summary_rows = [
+                    ["SpectraKinetics Export", ""],
+                    ["File", st.session_state.active_file],
+                    ["Export date", pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")],
+                    ["", ""],
+                    ["=== Dataset Info ===", ""],
+                    ["Wavelength range (nm)", f"{wavelengths.min():.2f} – {wavelengths.max():.2f}"],
+                    ["Time range (s)", f"{times.min():.2f} – {times.max():.2f}"],
+                    ["Number of wavelengths", len(wavelengths)],
+                    ["Number of time points", len(times)],
+                    ["Excitation wavelength (nm)", 280],
+                    ["", ""],
+                    ["=== Analysis Parameters ===", ""],
+                    ["Kinetics wavelength of interest (nm)", f"{wl_actual:.2f}"],
+                    ["Time range analysed (s)", f"{t_start:.2f} – {t_end:.2f}"],
+                    ["Spectra time point (s)", f"{t_actual_spec:.2f}"],
+                    ["", ""],
+                    ["=== IR/IF Ratio ===", ""],
+                    ["IR wavelength (nm)", f"{ir_actual:.2f}"],
+                    ["IF wavelength (nm)", f"{if_actual:.2f}"],
+                    ["Mean IR/IF ratio", f"{mean_irif:.6f}"],
+                    ["Final IR/IF ratio", f"{current_irif:.6f}"],
+                    ["", ""],
+                    ["=== I350/I330 Ratio ===", ""],
+                    ["Numerator wavelength (nm)", f"{wl_350_actual:.2f}"],
+                    ["Denominator wavelength (nm)", f"{wl_330_actual:.2f}"],
+                    ["Mean I350/I330", f"{mean_pie:.6f}"],
+                    ["Final I350/I330", f"{current_pie:.6f}"],
+                ]
+                summary_df = pd.DataFrame(summary_rows, columns=["Parameter", "Value"])
+                summary_df.to_excel(writer, sheet_name="Summary", index=False)
+
+                ws = writer.sheets["Summary"]
+                ws.column_dimensions["A"].width = 38
+                ws.column_dimensions["B"].width = 30
+
+            # ── Sheet 2: Kinetics trace ───────────────────────────────────
+            if include_kinetics:
+                kin_mask = (times >= t_start) & (times <= t_end)
+                kin_df = pd.DataFrame({
+                    "Time (s)": times[kin_mask],
+                    f"Intensity @ {wl_actual:.2f} nm (Ex 280 nm)": intensity.loc[wl_actual].values[kin_mask],
+                })
+                kin_df.to_excel(writer, sheet_name="Kinetics", index=False)
+                ws = writer.sheets["Kinetics"]
+                ws.column_dimensions["A"].width = 14
+                ws.column_dimensions["B"].width = 32
+
+            # ── Sheet 3: Spectra snapshot ─────────────────────────────────
+            if include_spectra:
+                spec_df_ex = pd.DataFrame({
+                    "Wavelength (nm)": wavelengths,
+                    f"Intensity @ t={t_actual_spec:.2f} s": intensity[t_actual_spec].values,
+                })
+                spec_df_ex.to_excel(writer, sheet_name="Spectra", index=False)
+                ws = writer.sheets["Spectra"]
+                ws.column_dimensions["A"].width = 18
+                ws.column_dimensions["B"].width = 28
+
+            # ── Sheet 4: IR/IF ratio ──────────────────────────────────────
+            if include_irif:
+                t_ir_ex, ir_ex, _ = get_intensity_series(ds, ir_wl, analysis_mask_ex)
+                _,       if_ex, _ = get_intensity_series(ds, if_wl, analysis_mask_ex)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    ratio_ex = np.where(if_ex != 0, ir_ex / if_ex, np.nan)
+                irif_df_ex = pd.DataFrame({
+                    "Time (s)": t_ir_ex,
+                    f"IR Intensity @ {ir_actual:.2f} nm": ir_ex,
+                    f"IF Intensity @ {if_actual:.2f} nm": if_ex,
+                    "IR/IF Ratio": ratio_ex,
+                })
+                irif_df_ex.to_excel(writer, sheet_name="IR-IF Ratio", index=False)
+                ws = writer.sheets["IR-IF Ratio"]
+                for col, w in zip(["A","B","C","D"], [14, 28, 28, 16]):
+                    ws.column_dimensions[col].width = w
+
+            # ── Sheet 5: I350/I330 ratio ──────────────────────────────────
+            if include_pie:
+                t_350_ex, i350_ex, _ = get_intensity_series(ds, wl_350_input, analysis_mask_ex)
+                _,        i330_ex, _ = get_intensity_series(ds, wl_330_input, analysis_mask_ex)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    ratio_pie_ex = np.where(i330_ex != 0, i350_ex / i330_ex, np.nan)
+                pie_df_ex = pd.DataFrame({
+                    "Time (s)": t_350_ex,
+                    f"I @ {wl_350_actual:.2f} nm": i350_ex,
+                    f"I @ {wl_330_actual:.2f} nm": i330_ex,
+                    f"I{wl_350_actual:.0f}/I{wl_330_actual:.0f} Ratio": ratio_pie_ex,
+                })
+                pie_df_ex.to_excel(writer, sheet_name="I350-I330 Ratio", index=False)
+                ws = writer.sheets["I350-I330 Ratio"]
+                for col, w in zip(["A","B","C","D"], [14, 24, 24, 20]):
+                    ws.column_dimensions[col].width = w
+
+            # ── Sheet 6: Raw intensity matrix ─────────────────────────────
+            if include_raw:
+                raw_export = intensity.copy()
+                raw_export.index.name = "Wavelength (nm) \\ Time (s)"
+                raw_export.to_excel(writer, sheet_name="Raw Intensity Matrix")
+
+        buf.seek(0)
+        return buf.read()
+
+    if st.button("🔨 Build Excel File"):
+        with st.spinner("Building workbook…"):
+            excel_bytes = build_excel()
+        fname = f"{export_fname}.xlsx"
+        st.download_button(
+            label="⬇ Download Excel Workbook",
+            data=excel_bytes,
+            file_name=fname,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_excel_final",
+        )
+        st.success(f"✅ **{fname}** is ready — click above to download.")
