@@ -181,22 +181,36 @@ if "active_file" not in st.session_state:
 def parse_spectro_file(file_bytes, filename):
     """
     Format:
-      Rows 1-11  : metadata (skip)
+      Rows 1-11  : metadata
+      Row 5      : labels — scan for 'Absorbance [a.u.]' to find absorbance column index
       Row 12     : col A (ignored), col B (ignored), col C onward = time values
-      Rows 13+   : col B = wavelength, col C onward = intensity
-    Excel col C = index 2 (0-based).
+                   (stops at first empty/non-numeric cell)
+      Rows 13+   : col B = wavelength, cols C..C+n = intensity,
+                   absorbance_col_idx = absorbance values (if present)
     """
     try:
         content = file_bytes.decode("utf-8", errors="replace")
     except Exception:
         content = file_bytes.decode("latin-1", errors="replace")
 
+    # Strip BOM if present
+    if content.startswith("\ufeff"):
+        content = content[1:]
+
     lines = content.splitlines()
 
     if len(lines) < 13:
         return None, f"File too short ({len(lines)} lines)"
 
-    # Row 12 (index 11) → time values starting at column C (index 2)
+    # ── Detect absorbance column from Row 5 (index 4) ────────────────────────
+    label_row = lines[4].split("\t")
+    abs_col_idx = None
+    for j, cell in enumerate(label_row):
+        if "absorbance" in cell.strip().lower() and "%" not in cell.lower():
+            abs_col_idx = j
+            break
+
+    # ── Row 12 (index 11) → time values starting at col C (index 2) ─────────
     time_row = lines[11].split("\t")
     times = []
     for val in time_row[2:]:
@@ -211,9 +225,10 @@ def parse_spectro_file(file_bytes, filename):
     if not times:
         return None, "Could not parse time values from row 12"
 
-    # Rows 13+ → wavelength (col B, index 1), intensities (cols C+)
+    # ── Rows 13+ → wavelength, intensities, and absorbance ───────────────────
     wavelengths = []
     intensity_matrix = []
+    absorbance_values = []
 
     for line in lines[12:]:
         parts = line.split("\t")
@@ -241,6 +256,15 @@ def parse_spectro_file(file_bytes, filename):
         wavelengths.append(wl)
         intensity_matrix.append(row_intensities)
 
+        # Absorbance value for this wavelength row
+        if abs_col_idx is not None and abs_col_idx < len(parts):
+            try:
+                absorbance_values.append(float(parts[abs_col_idx].strip()))
+            except ValueError:
+                absorbance_values.append(np.nan)
+        else:
+            absorbance_values.append(np.nan)
+
     if not wavelengths:
         return None, "No wavelength data found"
 
@@ -252,10 +276,16 @@ def parse_spectro_file(file_bytes, filename):
     intensity_df.index.name = "wavelength_nm"
     intensity_df.columns.name = "time_s"
 
+    # Build absorbance Series indexed by wavelength
+    absorbance_series = pd.Series(absorbance_values, index=wavelengths, name="absorbance")
+    has_absorbance = abs_col_idx is not None and not absorbance_series.isna().all()
+
     return {
         "times": np.array(times),
         "wavelengths": np.array(wavelengths),
         "intensity": intensity_df,
+        "absorbance": absorbance_series,
+        "has_absorbance": has_absorbance,
         "filename": filename,
     }, None
 
@@ -727,29 +757,87 @@ with tab_analysis:
 
     # ── TOOL 3: Absorbance Analysis ───────────────────────────────────────────
     with st.expander("📊 Tool 3 — Absorbance Analysis (Concentration & Aggregation Index)", expanded=True):
+
+        has_abs = ds.get("has_absorbance", False)
+        abs_series = ds.get("absorbance", pd.Series(dtype=float))
+
+        if has_abs:
+            st.markdown("""
+            <div style="color:#0a9e7a; font-size:0.85rem; margin-bottom:1rem;">
+            ✅ Absorbance data detected in this file and loaded automatically.
+            </div>
+            """, unsafe_allow_html=True)
+
+            # ── Absorbance spectrum plot ──────────────────────────────────
+            fig_abs = go.Figure()
+            fig_abs.add_trace(go.Scatter(
+                x=abs_series.index,
+                y=abs_series.values,
+                mode="lines",
+                name="Absorbance",
+                line=dict(color="#0e6b8c", width=2),
+                fill="tozeroy",
+                fillcolor="rgba(14,107,140,0.07)",
+            ))
+            # Mark 280 and 350 nm
+            for wl_mark, col_mark in [(280, "#0e6b8c"), (350, "#e67e22")]:
+                wl_m, _ = nearest(abs_series.index.values, wl_mark)
+                fig_abs.add_vline(x=wl_m, line_dash="dot", line_color=col_mark,
+                                  annotation_text=f"{wl_m:.0f} nm",
+                                  annotation_font_color=col_mark)
+            fig_abs.update_layout(
+                template="plotly_white",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#ffffff",
+                title=dict(text="Absorbance Spectrum", font=dict(family="Inter", size=13, color="#0e6b8c")),
+                xaxis=dict(title="Wavelength (nm)", gridcolor="#eef1f5", linecolor="#d0d7e2"),
+                yaxis=dict(title="Absorbance (a.u.)", gridcolor="#eef1f5", linecolor="#d0d7e2"),
+                margin=dict(t=45, b=40, l=50, r=20),
+            )
+            st.plotly_chart(fig_abs, use_container_width=True)
+
+        else:
+            st.markdown("""
+            <div style="color:var(--warn); font-size:0.85rem; margin-bottom:1rem;">
+            ⚠️ No absorbance column detected in the current file.
+            You can still enter values manually below.
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown("#### Protein Concentration (Beer-Lambert)")
         st.markdown("""
-        <div style="color:var(--muted); font-size:0.85rem; margin-bottom:1rem;">
-        Upload an absorbance spectrum file to calculate protein concentration (Beer-Lambert law)
-        and the Aggregation Index. <em>Absorbance file import coming soon — enter values manually below in the meantime.</em>
+        <div style="color:var(--muted); font-size:0.82rem; margin-bottom:0.75rem;">
+        c = A / (ε × l) — absorbance at your chosen wavelength is read from the file if available,
+        or enter manually.
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("#### Protein Concentration (Beer-Lambert)")
         col_a, col_b, col_c, col_d = st.columns(4)
+        with col_d:
+            abs_wl = st.number_input("Measurement wavelength (nm)", value=280.0, step=0.5, format="%.1f", key="abs_wl")
+
+        # Auto-fill absorbance value from parsed data if available
+        if has_abs:
+            abs_wl_nearest, _ = nearest(abs_series.index.values, abs_wl)
+            auto_abs_val = float(abs_series.loc[abs_wl_nearest]) if not np.isnan(abs_series.loc[abs_wl_nearest]) else 0.0
+        else:
+            auto_abs_val = 0.500
+
         with col_a:
-            abs_value = st.number_input("Absorbance at λ (A)", value=0.500, step=0.001, format="%.4f", key="abs_val")
+            abs_value = st.number_input(
+                f"Absorbance at λ (A)" + (f" [auto-filled @ {abs_wl_nearest:.1f} nm]" if has_abs else ""),
+                value=round(auto_abs_val, 6),
+                step=0.001, format="%.5f", key="abs_val"
+            )
         with col_b:
             ext_coeff = st.number_input("Extinction coefficient ε (M⁻¹cm⁻¹)", value=43824.0, step=100.0, format="%.1f", key="ext_coeff")
         with col_c:
-            path_len  = st.number_input("Path length l (cm)", value=1.0, step=0.1, format="%.2f", key="path_len")
-        with col_d:
-            abs_wl    = st.number_input("Measurement wavelength (nm)", value=280.0, step=0.5, format="%.1f", key="abs_wl")
+            path_len = st.number_input("Path length l (cm)", value=1.0, step=0.1, format="%.2f", key="path_len")
 
-        # Beer-Lambert: A = ε × l × c  →  c = A / (ε × l)
         if ext_coeff > 0 and path_len > 0:
             concentration_M  = abs_value / (ext_coeff * path_len)
             concentration_uM = concentration_M * 1e6
-            concentration_mgml = concentration_uM  # approx for ~1 kDa; user should adjust
         else:
             concentration_M = concentration_uM = 0.0
 
@@ -771,7 +859,6 @@ with tab_analysis:
         """, unsafe_allow_html=True)
 
         st.divider()
-
         st.markdown("#### Aggregation Index")
         st.markdown("""
         <div style="color:var(--muted); font-size:0.82rem; margin-bottom:0.75rem;">
@@ -779,11 +866,25 @@ with tab_analysis:
         </div>
         """, unsafe_allow_html=True)
 
+        # Auto-fill 280 and 350 from parsed absorbance
+        if has_abs:
+            wl280_n, _ = nearest(abs_series.index.values, 280.0)
+            wl350_n, _ = nearest(abs_series.index.values, 350.0)
+            auto_280 = float(abs_series.loc[wl280_n]) if not np.isnan(abs_series.loc[wl280_n]) else 0.500
+            auto_350 = float(abs_series.loc[wl350_n]) if not np.isnan(abs_series.loc[wl350_n]) else 0.020
+            st.markdown(f"""
+            <div style="font-size:0.8rem; color:#0a9e7a; margin-bottom:0.5rem;">
+            ✅ Auto-filled from file — Abs₂₈₀ @ {wl280_n:.2f} nm, Abs₃₅₀ @ {wl350_n:.2f} nm
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            auto_280, auto_350 = 0.500, 0.020
+
         col_e, col_f = st.columns(2)
         with col_e:
-            abs_280 = st.number_input("Absorbance at 280 nm", value=0.500, step=0.001, format="%.4f", key="abs280")
+            abs_280 = st.number_input("Absorbance at 280 nm", value=round(auto_280, 6), step=0.001, format="%.5f", key="abs280")
         with col_f:
-            abs_350 = st.number_input("Absorbance at 350 nm", value=0.020, step=0.001, format="%.4f", key="abs350")
+            abs_350 = st.number_input("Absorbance at 350 nm", value=round(auto_350, 6), step=0.001, format="%.5f", key="abs350")
 
         denom = abs_280 - abs_350
         if denom > 0:
@@ -809,13 +910,28 @@ with tab_analysis:
           </div>
           <div class="stat">
             <div class="stat-label">Abs₂₈₀ − Abs₃₅₀</div>
-            <div class="stat-value">{denom:.4f}</div>
+            <div class="stat-value">{denom:.5f}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Abs₂₈₀</div>
+            <div class="stat-value">{abs_280:.5f}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Abs₃₅₀</div>
+            <div class="stat-value">{abs_350:.5f}</div>
           </div>
         </div>
-        <div style="font-size:0.78rem; color:var(--muted); margin-top:0.25rem;">
-        ⚠️ Absorbance file import will be added once file format is confirmed. Manual entry available now.
-        </div>
         """, unsafe_allow_html=True)
+
+        if has_abs:
+            with st.expander("🔍 Full absorbance spectrum table"):
+                abs_df_show = pd.DataFrame({
+                    "Wavelength (nm)": abs_series.index,
+                    "Absorbance (a.u.)": abs_series.values,
+                })
+                st.dataframe(abs_df_show, use_container_width=True, height=250)
+                csv_abs = abs_df_show.to_csv(index=False).encode("utf-8")
+                st.download_button("⬇ Download absorbance spectrum", csv_abs, "absorbance_spectrum.csv", "text/csv", key="dl_abs")
 
 # ── RAW DATA TAB ──────────────────────────────────────────────────────────────
 with tab_data:
@@ -848,13 +964,14 @@ with tab_data:
 
     col_ex1, col_ex2 = st.columns(2)
     with col_ex1:
-        include_raw       = st.checkbox("Raw intensity matrix",     value=True)
-        include_kinetics  = st.checkbox("Kinetics trace",           value=True)
-        include_spectra   = st.checkbox("Spectra snapshot",         value=True)
+        include_raw       = st.checkbox("Raw intensity matrix",      value=True)
+        include_kinetics  = st.checkbox("Kinetics trace",            value=True)
+        include_spectra   = st.checkbox("Spectra snapshot",          value=True)
     with col_ex2:
-        include_irif      = st.checkbox("IR/IF ratio over time",    value=True)
-        include_pie       = st.checkbox("I350/I330 ratio over time", value=True)
-        include_summary   = st.checkbox("Summary sheet",            value=True)
+        include_irif      = st.checkbox("IR/IF ratio over time",     value=True)
+        include_pie       = st.checkbox("I350/I330 ratio over time",  value=True)
+        include_absorbance= st.checkbox("Absorbance spectrum",        value=ds.get("has_absorbance", False))
+        include_summary   = st.checkbox("Summary sheet",             value=True)
 
     def build_excel():
         buf = io.BytesIO()
@@ -875,6 +992,7 @@ with tab_data:
                     ["Number of wavelengths", len(wavelengths)],
                     ["Number of time points", len(times)],
                     ["Excitation wavelength (nm)", 280],
+                    ["Absorbance data present", "Yes" if ds.get("has_absorbance") else "No"],
                     ["", ""],
                     ["=== Analysis Parameters ===", ""],
                     ["Kinetics wavelength of interest (nm)", f"{wl_actual:.2f}"],
@@ -892,12 +1010,20 @@ with tab_data:
                     ["Denominator wavelength (nm)", f"{wl_330_actual:.2f}"],
                     ["Mean I350/I330", f"{mean_pie:.6f}"],
                     ["Final I350/I330", f"{current_pie:.6f}"],
+                    ["", ""],
+                    ["=== Absorbance / Concentration ===", ""],
+                    ["Abs at 280 nm", f"{abs_280:.6f}"],
+                    ["Abs at 350 nm", f"{abs_350:.6f}"],
+                    ["Aggregation Index (%)", f"{'%.4f' % agg_index if not np.isnan(agg_index) else 'N/A'}"],
+                    ["Extinction coefficient ε (M⁻¹cm⁻¹)", f"{ext_coeff:.1f}"],
+                    ["Path length (cm)", f"{path_len:.2f}"],
+                    ["Concentration (M)", f"{concentration_M:.6e}"],
+                    ["Concentration (μM)", f"{concentration_uM:.4f}"],
                 ]
                 summary_df = pd.DataFrame(summary_rows, columns=["Parameter", "Value"])
                 summary_df.to_excel(writer, sheet_name="Summary", index=False)
-
                 ws = writer.sheets["Summary"]
-                ws.column_dimensions["A"].width = 38
+                ws.column_dimensions["A"].width = 40
                 ws.column_dimensions["B"].width = 30
 
             # ── Sheet 2: Kinetics trace ───────────────────────────────────
@@ -957,7 +1083,19 @@ with tab_data:
                 for col, w in zip(["A","B","C","D"], [14, 24, 24, 20]):
                     ws.column_dimensions[col].width = w
 
-            # ── Sheet 6: Raw intensity matrix ─────────────────────────────
+            # ── Sheet 6: Absorbance spectrum ──────────────────────────────
+            if include_absorbance and ds.get("has_absorbance"):
+                abs_s = ds["absorbance"]
+                abs_df_ex = pd.DataFrame({
+                    "Wavelength (nm)": abs_s.index,
+                    "Absorbance (a.u.)": abs_s.values,
+                })
+                abs_df_ex.to_excel(writer, sheet_name="Absorbance Spectrum", index=False)
+                ws = writer.sheets["Absorbance Spectrum"]
+                ws.column_dimensions["A"].width = 20
+                ws.column_dimensions["B"].width = 22
+
+            # ── Sheet 7: Raw intensity matrix ─────────────────────────────
             if include_raw:
                 raw_export = intensity.copy()
                 raw_export.index.name = "Wavelength (nm) \\ Time (s)"
