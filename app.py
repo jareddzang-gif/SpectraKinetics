@@ -565,6 +565,257 @@ with tab_spectra:
         })
         st.dataframe(spec_df, use_container_width=True, height=250)
 
+# ── SPECTRAL ANALYSIS TAB ─────────────────────────────────────────────────────
+with tab_analysis:
+
+    st.markdown('<div class="card-title">Spectral Analysis Tools</div>', unsafe_allow_html=True)
+
+    # ── Helper: get intensity series for a wavelength over time ──
+    def get_intensity_series(ds, wl_target, t_mask=None):
+        wl_act, _ = nearest(ds["wavelengths"], wl_target)
+        vals = ds["intensity"].loc[wl_act].values
+        t = ds["times"]
+        if t_mask is not None:
+            vals = vals[t_mask]
+            t = t[t_mask]
+        return t, vals, wl_act
+
+    analysis_mask = (times >= t_start) & (times <= t_end)
+
+    # ── TOOL 1: IR/IF Ratio (Rayleigh-Mie scattering) ────────────────────────
+    with st.expander("📊 Tool 1 — IR/IF Ratio (Rayleigh-Mie Scattering)", expanded=True):
+        st.markdown("""
+        <div style="color:var(--muted); font-size:0.85rem; margin-bottom:1rem;">
+        Ratio of scattered light (IR, Rayleigh-Mie band) to intrinsic fluorescence (IF).
+        Rising IR/IF over time indicates increasing aggregation/scattering.
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_ctrl, col_vals = st.columns([2, 1])
+        with col_ctrl:
+            ir_wl = st.number_input("IR wavelength (nm)", value=280.0, step=0.5, format="%.1f", key="ir_wl")
+            if_wl = st.number_input("IF wavelength (nm)", value=340.0, step=0.5, format="%.1f", key="if_wl")
+
+        t_ir, ir_vals, ir_actual = get_intensity_series(ds, ir_wl, analysis_mask)
+        _,    if_vals, if_actual = get_intensity_series(ds, if_wl, analysis_mask)
+
+        # Avoid divide by zero
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio_irif = np.where(if_vals != 0, ir_vals / if_vals, np.nan)
+
+        current_irif = ratio_irif[-1] if not np.all(np.isnan(ratio_irif)) else np.nan
+        mean_irif    = np.nanmean(ratio_irif)
+
+        with col_vals:
+            st.markdown(f"""
+            <div class="card" style="margin-top:0.5rem;">
+                <div class="stat-label">Current IR/IF</div>
+                <div class="stat-value" style="font-size:1.4rem;">{current_irif:.4f}</div>
+                <div class="stat-label" style="margin-top:0.5rem;">Mean IR/IF</div>
+                <div class="stat-value">{mean_irif:.4f}</div>
+                <div class="stat-label" style="margin-top:0.5rem;">IR λ used</div>
+                <div class="stat-value">{ir_actual:.2f} nm</div>
+                <div class="stat-label" style="margin-top:0.5rem;">IF λ used</div>
+                <div class="stat-value">{if_actual:.2f} nm</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        fig_irif = go.Figure()
+        fig_irif.add_trace(go.Scatter(
+            x=t_ir, y=ratio_irif,
+            mode="lines",
+            name="IR/IF ratio",
+            line=dict(color="#0e6b8c", width=2),
+            fill="tozeroy",
+            fillcolor="rgba(14,107,140,0.07)",
+        ))
+        fig_irif.update_layout(
+            template="plotly_white",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="#ffffff",
+            title=dict(text=f"IR/IF Ratio over Time  (IR={ir_actual:.1f} nm / IF={if_actual:.1f} nm)",
+                       font=dict(family="Inter", size=13, color="#0e6b8c")),
+            xaxis=dict(title="Time (s)", gridcolor="#eef1f5", linecolor="#d0d7e2"),
+            yaxis=dict(title="IR/IF Ratio", gridcolor="#eef1f5", linecolor="#d0d7e2"),
+            margin=dict(t=45, b=40, l=50, r=20),
+            hovermode="x unified",
+        )
+        st.plotly_chart(fig_irif, use_container_width=True)
+
+        with st.expander("🔍 IR/IF data table"):
+            irif_df = pd.DataFrame({
+                "Time (s)": t_ir,
+                f"IR @ {ir_actual:.2f} nm": ir_vals,
+                f"IF @ {if_actual:.2f} nm": if_vals,
+                "IR/IF Ratio": ratio_irif,
+            })
+            st.dataframe(irif_df, use_container_width=True, height=220)
+            csv_irif = irif_df.to_csv(index=False).encode("utf-8")
+            st.download_button("⬇ Download IR/IF data", csv_irif, "irif_ratio.csv", "text/csv", key="dl_irif")
+
+    # ── TOOL 2: I350/I330 Ratio (Polarized Intrinsic Emission) ───────────────
+    with st.expander("📊 Tool 2 — I350/I330 Ratio (Polarized Intrinsic Emission)", expanded=True):
+        st.markdown("""
+        <div style="color:var(--muted); font-size:0.85rem; margin-bottom:1rem;">
+        Ratio of emission intensity at 350 nm to 330 nm. Reflects changes in the
+        local environment of tryptophan residues — a red shift (rising ratio) indicates
+        increased solvent exposure, unfolding, or conformational change.
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_ctrl2, col_vals2 = st.columns([2, 1])
+        with col_ctrl2:
+            wl_350_input = st.number_input("Numerator wavelength (nm)", value=350.0, step=0.5, format="%.1f", key="wl350")
+            wl_330_input = st.number_input("Denominator wavelength (nm)", value=330.0, step=0.5, format="%.1f", key="wl330")
+
+        t_350, i350_vals, wl_350_actual = get_intensity_series(ds, wl_350_input, analysis_mask)
+        _,     i330_vals, wl_330_actual = get_intensity_series(ds, wl_330_input, analysis_mask)
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio_pie = np.where(i330_vals != 0, i350_vals / i330_vals, np.nan)
+
+        current_pie = ratio_pie[-1] if not np.all(np.isnan(ratio_pie)) else np.nan
+        mean_pie    = np.nanmean(ratio_pie)
+
+        with col_vals2:
+            st.markdown(f"""
+            <div class="card" style="margin-top:0.5rem;">
+                <div class="stat-label">Current I350/I330</div>
+                <div class="stat-value" style="font-size:1.4rem;">{current_pie:.4f}</div>
+                <div class="stat-label" style="margin-top:0.5rem;">Mean I350/I330</div>
+                <div class="stat-value">{mean_pie:.4f}</div>
+                <div class="stat-label" style="margin-top:0.5rem;">λ₁ used</div>
+                <div class="stat-value">{wl_350_actual:.2f} nm</div>
+                <div class="stat-label" style="margin-top:0.5rem;">λ₂ used</div>
+                <div class="stat-value">{wl_330_actual:.2f} nm</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        fig_pie = go.Figure()
+        fig_pie.add_trace(go.Scatter(
+            x=t_350, y=ratio_pie,
+            mode="lines",
+            name="I350/I330",
+            line=dict(color="#0a9e7a", width=2),
+            fill="tozeroy",
+            fillcolor="rgba(10,158,122,0.07)",
+        ))
+        fig_pie.update_layout(
+            template="plotly_white",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="#ffffff",
+            title=dict(text=f"I{wl_350_actual:.0f}/I{wl_330_actual:.0f} Ratio over Time",
+                       font=dict(family="Inter", size=13, color="#0a9e7a")),
+            xaxis=dict(title="Time (s)", gridcolor="#eef1f5", linecolor="#d0d7e2"),
+            yaxis=dict(title=f"I{wl_350_actual:.0f}/I{wl_330_actual:.0f} Ratio", gridcolor="#eef1f5", linecolor="#d0d7e2"),
+            margin=dict(t=45, b=40, l=50, r=20),
+            hovermode="x unified",
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+        with st.expander("🔍 I350/I330 data table"):
+            pie_df = pd.DataFrame({
+                "Time (s)": t_350,
+                f"I @ {wl_350_actual:.2f} nm": i350_vals,
+                f"I @ {wl_330_actual:.2f} nm": i330_vals,
+                f"I{wl_350_actual:.0f}/I{wl_330_actual:.0f} Ratio": ratio_pie,
+            })
+            st.dataframe(pie_df, use_container_width=True, height=220)
+            csv_pie = pie_df.to_csv(index=False).encode("utf-8")
+            st.download_button("⬇ Download I350/I330 data", csv_pie, "i350_i330_ratio.csv", "text/csv", key="dl_pie")
+
+    # ── TOOL 3: Absorbance Analysis ───────────────────────────────────────────
+    with st.expander("📊 Tool 3 — Absorbance Analysis (Concentration & Aggregation Index)", expanded=True):
+        st.markdown("""
+        <div style="color:var(--muted); font-size:0.85rem; margin-bottom:1rem;">
+        Upload an absorbance spectrum file to calculate protein concentration (Beer-Lambert law)
+        and the Aggregation Index. <em>Absorbance file import coming soon — enter values manually below in the meantime.</em>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("#### Protein Concentration (Beer-Lambert)")
+        col_a, col_b, col_c, col_d = st.columns(4)
+        with col_a:
+            abs_value = st.number_input("Absorbance at λ (A)", value=0.500, step=0.001, format="%.4f", key="abs_val")
+        with col_b:
+            ext_coeff = st.number_input("Extinction coefficient ε (M⁻¹cm⁻¹)", value=43824.0, step=100.0, format="%.1f", key="ext_coeff")
+        with col_c:
+            path_len  = st.number_input("Path length l (cm)", value=1.0, step=0.1, format="%.2f", key="path_len")
+        with col_d:
+            abs_wl    = st.number_input("Measurement wavelength (nm)", value=280.0, step=0.5, format="%.1f", key="abs_wl")
+
+        # Beer-Lambert: A = ε × l × c  →  c = A / (ε × l)
+        if ext_coeff > 0 and path_len > 0:
+            concentration_M  = abs_value / (ext_coeff * path_len)
+            concentration_uM = concentration_M * 1e6
+            concentration_mgml = concentration_uM  # approx for ~1 kDa; user should adjust
+        else:
+            concentration_M = concentration_uM = 0.0
+
+        st.markdown(f"""
+        <div class="stat-row" style="margin-top:0.75rem;">
+          <div class="stat">
+            <div class="stat-label">Concentration (M)</div>
+            <div class="stat-value">{concentration_M:.4e}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Concentration (μM)</div>
+            <div class="stat-value">{concentration_uM:.4f} μM</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Formula</div>
+            <div class="stat-value" style="font-size:0.78rem; color:var(--muted);">c = A / (ε × l)</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.divider()
+
+        st.markdown("#### Aggregation Index")
+        st.markdown("""
+        <div style="color:var(--muted); font-size:0.82rem; margin-bottom:0.75rem;">
+        AggIndex = (Abs₃₅₀ / (Abs₂₈₀ − Abs₃₅₀)) × 100
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_e, col_f = st.columns(2)
+        with col_e:
+            abs_280 = st.number_input("Absorbance at 280 nm", value=0.500, step=0.001, format="%.4f", key="abs280")
+        with col_f:
+            abs_350 = st.number_input("Absorbance at 350 nm", value=0.020, step=0.001, format="%.4f", key="abs350")
+
+        denom = abs_280 - abs_350
+        if denom > 0:
+            agg_index = (abs_350 / denom) * 100
+            agg_color = "#0a9e7a" if agg_index < 5 else ("#e67e22" if agg_index < 15 else "#c0392b")
+            agg_label = "Low aggregation" if agg_index < 5 else ("Moderate aggregation" if agg_index < 15 else "High aggregation")
+        else:
+            agg_index = float("nan")
+            agg_color = "#5a6a7e"
+            agg_label = "Invalid (Abs₂₈₀ must be > Abs₃₅₀)"
+
+        st.markdown(f"""
+        <div class="stat-row" style="margin-top:0.75rem;">
+          <div class="stat">
+            <div class="stat-label">Aggregation Index</div>
+            <div class="stat-value" style="font-size:1.6rem; color:{agg_color};">
+              {"%.2f" % agg_index if not np.isnan(agg_index) else "—"} %
+            </div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Interpretation</div>
+            <div class="stat-value" style="color:{agg_color}; font-size:0.85rem;">{agg_label}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Abs₂₈₀ − Abs₃₅₀</div>
+            <div class="stat-value">{denom:.4f}</div>
+          </div>
+        </div>
+        <div style="font-size:0.78rem; color:var(--muted); margin-top:0.25rem;">
+        ⚠️ Absorbance file import will be added once file format is confirmed. Manual entry available now.
+        </div>
+        """, unsafe_allow_html=True)
+
 # ── RAW DATA TAB ──────────────────────────────────────────────────────────────
 with tab_data:
     st.markdown('<div class="card-title">Raw Intensity Matrix (wavelengths × time)</div>', unsafe_allow_html=True)
