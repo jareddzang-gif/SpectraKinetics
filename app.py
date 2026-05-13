@@ -5,9 +5,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 import io, zipfile
 
-# ✅ FIX: use numpy instead of scipy
-from numpy import trapz
-
 st.set_page_config(page_title='SpectraKinetics v8', layout='wide')
 
 if 'datasets' not in st.session_state:
@@ -88,12 +85,12 @@ for i,(name,d) in enumerate(data.items()):
     irif = y[i280]/y[i340] if y[i340]!=0 else np.nan
     pie = y[i350]/y[i330] if y[i330]!=0 else np.nan
 
-    # ✅ FIX: use trapz instead of simpson
     mask_ray = (wl>=260)&(wl<=300)
     mask_flu = (wl>=300)&(wl<=400)
 
-    auc_ray = trapz(y[mask_ray], wl[mask_ray])
-    auc_flu = trapz(y[mask_flu], wl[mask_flu])
+    # ✅ FIX FINAL: use np.trapz directly
+    auc_ray = np.trapz(y[mask_ray], wl[mask_ray])
+    auc_flu = np.trapz(y[mask_flu], wl[mask_flu])
 
     shift_ratio = auc_ray/auc_flu if auc_flu!=0 else np.nan
 
@@ -110,7 +107,7 @@ st.dataframe(df, use_container_width=True)
 fig_line = px.line(df.sort_values("Index"), x="Index", y="IR/IF", markers=True, title="IR/IF Trend")
 st.plotly_chart(fig_line, use_container_width=True)
 
-# LINEAR REGRESSION (manual, no scipy)
+# REGRESSION
 if len(blue_shift_values) > 1:
     x = np.array(file_index)
     y_vals = np.array(blue_shift_values)
@@ -118,7 +115,6 @@ if len(blue_shift_values) > 1:
     coeffs = np.polyfit(x, y_vals, 1)
     reg_line = coeffs[0]*x + coeffs[1]
 
-    # R^2
     ss_res = np.sum((y_vals - reg_line)**2)
     ss_tot = np.sum((y_vals - np.mean(y_vals))**2)
     r2 = 1 - (ss_res/ss_tot if ss_tot!=0 else 0)
@@ -147,4 +143,4 @@ def build_zip():
     return buf
 
 if st.button("Build ZIP"):
-    st.download_button("Download", build_zip(), "spectrakinetics_v8_fixed.zip")
+    st.download_button("Download", build_zip(), "spectrakinetics_v8_cloudsafe.zip")
