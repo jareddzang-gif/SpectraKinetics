@@ -4,30 +4,20 @@ import numpy as np
 import plotly.graph_objects as go
 import io, zipfile, re
 
-st.set_page_config(page_title='SpectraKinetics v11.4', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v11.5 (Visual Upgrade)', layout='wide')
 
 # NAV
 page = st.sidebar.radio("Navigation", ["Spectra Analysis", "Kinetics"])
 
-# LOGO
-st.markdown("""
-<div style='text-align:center;'>
-<h1 style='color:#0B3D91; font-size:60px;'>NBL</h1>
-</div>
-""", unsafe_allow_html=True)
-
-if 'datasets' not in st.session_state:
-    st.session_state.datasets = {}
-
 # CLEAN NAME
+
 def clean_filename(name):
     match = re.search(r"(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})", name)
     return match.group(1) if match else name[:15]
 
-# PARSER
+# PARSER (unchanged logically)
 def parse_file(file_bytes, filename):
     content = file_bytes.decode('utf-8', errors='replace').splitlines()
-
     spectra = {}
     wavelengths = []
     ex_vals = []
@@ -37,11 +27,9 @@ def parse_file(file_bytes, filename):
         if "kinetic time" in line.lower():
             parts = line.split("	")
             blank_idx = next((j for j,p in enumerate(parts) if p.strip()==""), None)
-
             if blank_idx is not None:
                 times = [float(x) for x in parts[blank_idx+1:] if x]
                 wl, mat = [], []
-
                 for row in content[i+1:]:
                     r = row.split("	")
                     try:
@@ -49,12 +37,7 @@ def parse_file(file_bytes, filename):
                         mat.append([float(x) for x in r[blank_idx+1:blank_idx+1+len(times)]])
                     except:
                         continue
-
-                kinetics = {
-                    "times": np.array(times),
-                    "wavelengths": np.array(wl),
-                    "matrix": np.array(mat)
-                }
+                kinetics = {"times": np.array(times), "wavelengths": np.array(wl), "matrix": np.array(mat)}
 
     for i, line in enumerate(content):
         parts = line.split("	")
@@ -77,14 +60,9 @@ def parse_file(file_bytes, filename):
     for j, ex in enumerate(ex_vals if len(matrix)>0 else []):
         spectra[ex] = matrix[:, j]
 
-    return {
-        'wavelengths': np.array(wavelengths),
-        'spectra': spectra,
-        'filename': clean_filename(filename),
-        'kinetics': kinetics
-    }
+    return {'wavelengths': np.array(wavelengths),'spectra': spectra,'filename': clean_filename(filename),'kinetics': kinetics}
 
-# UPLOAD
+# Upload
 files = st.sidebar.file_uploader("Upload ≤200 files", type=['txt'], accept_multiple_files=True)
 ex_toggle = st.sidebar.radio("Spectra View", [280, 260])
 
@@ -95,155 +73,116 @@ if files:
         st.session_state.datasets[parsed['filename']] = parsed
 
 
-data = st.session_state.datasets
+data = st.session_state.get('datasets', {})
 if not data:
     st.stop()
 
-# ===================== SPECTRA PAGE (RESTORED ONLY REQUESTED ITEMS) =====================
+# ---------- VISUAL STYLE ----------
+def styled_layout(fig, title):
+    fig.update_layout(
+        title=dict(text=title, x=0.5, font=dict(size=20)),
+        template='plotly_white',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+        margin=dict(l=40, r=40, t=70, b=40)
+    )
+    return fig
+
+# =====================================================
 if page == "Spectra Analysis":
 
     st.title("Spectra Analysis")
 
-    rows = []
-
+    rows=[]
     for i,(name,d) in enumerate(data.items()):
         if 280 not in d['spectra']: continue
+        wl=d['wavelengths']; y=d['spectra'][280]
 
-        wl = d['wavelengths']
-        y = d['spectra'][280]
-
-        # IR
-        ir_idx = np.argmax(y)
-        ir_peak = wl[ir_idx]
-        ir_int = y[ir_idx]
-
-        # IF
-        mask = (wl>=300)&(wl<=390)
+        ir_idx=np.argmax(y); ir_peak=wl[ir_idx]; ir_int=y[ir_idx]
+        mask=(wl>=300)&(wl<=390)
         if np.any(mask):
-            y_if = y[mask]
-            wl_if = wl[mask]
-            idx = np.argmax(y_if)
-            if_peak = wl_if[idx]
-            if_int = y_if[idx]
+            y_if=y[mask]; wl_if=wl[mask]; idx=np.argmax(y_if)
+            if_peak=wl_if[idx]; if_int=y_if[idx]
         else:
-            if_peak = np.nan
-            if_int = np.nan
+            if_peak=np.nan; if_int=np.nan
 
-        nearest = lambda v: np.argmin(np.abs(wl-v))
-        irif = y[nearest(280)]/y[nearest(340)] if y[nearest(340)]!=0 else np.nan
-        pie = y[nearest(350)]/y[nearest(330)] if y[nearest(330)]!=0 else np.nan
-
-        # placeholders
-        agg = np.nan
-        conc = np.nan
+        nearest=lambda v: np.argmin(np.abs(wl-v))
+        irif=y[nearest(280)]/y[nearest(340)] if y[nearest(340)]!=0 else np.nan
+        pie=y[nearest(350)]/y[nearest(330)] if y[nearest(330)]!=0 else np.nan
 
         rows.append({
-            "File":name,
-            "Index":i,
-            "IR/IF":irif,
-            "I350/I330":pie,
-            "Aggregation Index":agg,
-            "Concentration (mg/mL)":conc,
-            "IR (nm)":ir_peak,
-            "IR Peak Intensity":ir_int,
-            "IF (nm)":if_peak,
-            "IF Peak Intensity":if_int
+            "File":name,"Index":i,"IR/IF":irif,"I350/I330":pie,
+            "Aggregation Index":np.nan,"Concentration (mg/mL)":np.nan,
+            "IR (nm)":ir_peak,"IR Peak Intensity":ir_int,
+            "IF (nm)":if_peak,"IF Peak Intensity":if_int
         })
 
-    df = pd.DataFrame(rows)
+    df=pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True)
 
-    # Spectra unchanged
-    st.header(f"Spectra Overlay (Ex {ex_toggle})")
-    fig = go.Figure()
+    # Spectra plot (styled only)
+    fig=go.Figure()
     for name,d in data.items():
         if ex_toggle in d['spectra']:
-            fig.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][ex_toggle], name=name))
-
+            fig.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][ex_toggle], name=name, line=dict(width=2)))
+    fig = styled_layout(fig, f"Spectra Overlay (Ex {ex_toggle} nm)")
+    fig.update_xaxes(title="Wavelength (nm)")
+    fig.update_yaxes(title="Intensity")
     st.plotly_chart(fig, use_container_width=True, key=f"spectra_{ex_toggle}")
 
-    # APIES plot (restored)
-    st.header("APIES (All Metrics Overlay)")
+    # APIES plot (styled)
+    fig2=go.Figure()
+    fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF', mode='lines+markers', line=dict(width=3)))
+    fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330', mode='lines+markers', line=dict(width=3)))
 
-    fig2 = go.Figure()
-
-    fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF', mode='lines+markers'))
-    fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330', mode='lines+markers'))
-
-    if df['Aggregation Index'].notna().any():
-        fig2.add_trace(go.Scatter(x=df['Index'], y=df['Aggregation Index'], name='AggIndex', mode='lines+markers', yaxis='y2'))
-
-    if df['Concentration (mg/mL)'].notna().any():
-        fig2.add_trace(go.Scatter(x=df['Index'], y=df['Concentration (mg/mL)'], name='Concentration', mode='lines+markers', yaxis='y2'))
-
-    fig2.update_layout(
-        yaxis=dict(title="Fluorescence Ratios"),
-        yaxis2=dict(title="Absorbance Metrics", overlaying='y', side='right'),
-        title="APIES"
-    )
+    fig2 = styled_layout(fig2, "APIES (All Metrics Overlay)")
+    fig2.update_xaxes(title="Sample Index")
+    fig2.update_yaxes(title="Fluorescence Ratios")
 
     st.plotly_chart(fig2, use_container_width=True, key="apies_plot")
 
-# ===================== KINETICS PAGE (UNCHANGED FROM FIXED) =====================
+# =====================================================
 if page == "Kinetics":
 
     st.title("Kinetics Analysis (Merged Timeline)")
 
-    segments_280, segments_350 = [], []
+    segments_280=[]; segments_350=[]
+    sorted_items=sorted(data.items(), key=lambda x:x[0])
+    time_offset=0
 
-    sorted_items = sorted(data.items(), key=lambda x: x[0])
-    time_offset = 0
+    for name,d in sorted_items:
+        if d['kinetics'] is None: continue
+        kin=d['kinetics']; times=kin['times']
+        if len(times)==0: continue
+        wl=kin['wavelengths']; matrix=kin['matrix']
+        if len(wl)==0 or matrix.size==0: continue
 
-    for name, d in sorted_items:
-        if d['kinetics'] is None:
-            continue
+        i280=np.argmin(np.abs(wl-280)); i350=np.argmin(np.abs(wl-350))
+        s280=matrix[i280,:]; s350=matrix[i350,:]
 
-        kin = d['kinetics']
-        times = kin['times']
+        t=times+time_offset
+        segments_280.append((t,s280)); segments_350.append((t,s350))
+        time_offset += (times[-1]-times[0])
 
-        if len(times) == 0:
-            continue
+    if segments_280:
+        fig_k=go.Figure()
+        for t,y in segments_280:
+            fig_k.add_trace(go.Scatter(x=t,y=y,name='280 nm (IR)',line=dict(color='#1f77b4',width=2)))
+        for t,y in segments_350:
+            fig_k.add_trace(go.Scatter(x=t,y=y,name='350 nm (IF)',line=dict(color='#d62728',width=2)))
 
-        wl = kin['wavelengths']
-        matrix = kin['matrix']
-
-        if len(wl) == 0 or matrix.size == 0:
-            continue
-
-        idx_280 = np.argmin(np.abs(wl-280))
-        idx_350 = np.argmin(np.abs(wl-350))
-
-        signal_280 = matrix[idx_280,:]
-        signal_350 = matrix[idx_350,:]
-
-        shifted_time = times + time_offset
-
-        segments_280.append((shifted_time, signal_280))
-        segments_350.append((shifted_time, signal_350))
-
-        time_offset += (times[-1] - times[0])
-
-    if len(segments_280) > 0:
-        fig_k = go.Figure()
-
-        for i,(t,y) in enumerate(segments_280):
-            fig_k.add_trace(go.Scatter(x=t, y=y, name=f'280 nm run {i+1}', mode='lines'))
-
-        for i,(t,y) in enumerate(segments_350):
-            fig_k.add_trace(go.Scatter(x=t, y=y, name=f'350 nm run {i+1}', mode='lines'))
-
-        fig_k.update_layout(title="Merged Kinetics Timeline", xaxis_title="Time (s)", yaxis_title="Intensity")
+        fig_k = styled_layout(fig_k, "Merged Kinetics Timeline")
+        fig_k.update_xaxes(title="Time (s)")
+        fig_k.update_yaxes(title="Intensity")
 
         st.plotly_chart(fig_k, use_container_width=True, key="kinetics_merged")
-
     else:
         st.info("No valid kinetics data detected.")
 
 # EXPORT
 st.sidebar.markdown("---")
 if st.sidebar.button("Download Analysis CSV"):
-    buf = io.BytesIO()
+    buf=io.BytesIO()
     with zipfile.ZipFile(buf,'w') as z:
         z.writestr('analysis.csv', df.to_csv(index=False) if 'df' in locals() else "")
     buf.seek(0)
-    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_4.zip")
+    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_5_visual.zip")
