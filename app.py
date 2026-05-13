@@ -10,6 +10,12 @@ st.set_page_config(page_title='SpectraKinetics v8', layout='wide')
 if 'datasets' not in st.session_state:
     st.session_state.datasets = {}
 
+# ✅ UNIVERSAL AUC (NO NUMPY/SCIPY DEPENDENCY)
+def safe_trapz(y, x):
+    y = np.array(y)
+    x = np.array(x)
+    return np.sum((y[1:] + y[:-1]) * (x[1:] - x[:-1]) / 2)
+
 # PARSER
 
 def parse_file(file_bytes, filename):
@@ -54,7 +60,7 @@ with st.sidebar:
 
     ex_choice = st.selectbox('Excitation', [280, 260])
 
-st.title("SpectraKinetics v8 — Full Pipeline")
+st.title("SpectraKinetics v8 — Cloud-Safe Final")
 
 data = st.session_state.datasets
 if not data:
@@ -88,9 +94,9 @@ for i,(name,d) in enumerate(data.items()):
     mask_ray = (wl>=260)&(wl<=300)
     mask_flu = (wl>=300)&(wl<=400)
 
-    # ✅ FIX FINAL: use np.trapz directly
-    auc_ray = np.trapz(y[mask_ray], wl[mask_ray])
-    auc_flu = np.trapz(y[mask_flu], wl[mask_flu])
+    # ✅ FINAL FIX: custom trapezoid
+    auc_ray = safe_trapz(y[mask_ray], wl[mask_ray])
+    auc_flu = safe_trapz(y[mask_flu], wl[mask_flu])
 
     shift_ratio = auc_ray/auc_flu if auc_flu!=0 else np.nan
 
@@ -103,11 +109,11 @@ for i,(name,d) in enumerate(data.items()):
 df = pd.DataFrame(rows)
 st.dataframe(df, use_container_width=True)
 
-# LINE GRAPH IR/IF
+# IR/IF Line Plot
 fig_line = px.line(df.sort_values("Index"), x="Index", y="IR/IF", markers=True, title="IR/IF Trend")
 st.plotly_chart(fig_line, use_container_width=True)
 
-# REGRESSION
+# Regression
 if len(blue_shift_values) > 1:
     x = np.array(file_index)
     y_vals = np.array(blue_shift_values)
@@ -122,7 +128,6 @@ if len(blue_shift_values) > 1:
     fig_reg = go.Figure()
     fig_reg.add_trace(go.Scatter(x=x,y=y_vals, mode='markers', name='Shift'))
     fig_reg.add_trace(go.Scatter(x=x,y=reg_line, mode='lines', name=f'Fit (R²={r2:.3f})'))
-    fig_reg.update_layout(title="Blue Shift Regression")
     st.plotly_chart(fig_reg, use_container_width=True)
 
 # EXPORT
@@ -143,4 +148,4 @@ def build_zip():
     return buf
 
 if st.button("Build ZIP"):
-    st.download_button("Download", build_zip(), "spectrakinetics_v8_cloudsafe.zip")
+    st.download_button("Download", build_zip(), "spectrakinetics_v8_final.zip")
