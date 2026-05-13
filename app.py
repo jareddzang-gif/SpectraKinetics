@@ -3,15 +3,28 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 import io, zipfile
+import re
 
-st.set_page_config(page_title='SpectraKinetics v9.2', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v9.3', layout='wide')
+
+# ---------------- LOGO ----------------
+st.markdown("""
+<div style='text-align:center;'>
+<h1 style='color:#0B3D91; font-size:60px;'>NBL</h1>
+</div>
+""", unsafe_allow_html=True)
 
 if 'datasets' not in st.session_state:
     st.session_state.datasets = {}
 
-# PARSER
+# ---------------- RENAME FILE ----------------
+def clean_filename(name):
+    match = re.search(r"(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})", name)
+    return match.group(1) if match else name[:15]
 
+# ---------------- PARSER ----------------
 def parse_file(file_bytes, filename):
     content = file_bytes.decode('utf-8', errors='replace').splitlines()
     spectra, wavelengths, ex_vals = {}, [], []
@@ -37,7 +50,7 @@ def parse_file(file_bytes, filename):
     for j, ex in enumerate(ex_vals):
         spectra[ex] = matrix[:, j]
 
-    return {'wavelengths': np.array(wavelengths), 'spectra': spectra, 'filename': filename}
+    return {'wavelengths': np.array(wavelengths), 'spectra': spectra, 'filename': clean_filename(filename)}
 
 
 def nearest(arr, val):
@@ -50,9 +63,10 @@ with st.sidebar:
     if files:
         st.session_state.datasets = {}
         for f in files[:200]:
-            st.session_state.datasets[f.name] = parse_file(f.read(), f.name)
+            parsed = parse_file(f.read(), f.name)
+            st.session_state.datasets[parsed['filename']] = parsed
 
-st.title("SpectraKinetics v9.2 — Dual Axis Clean View")
+st.title("SpectraKinetics v9.3 — Enhanced Analysis")
 
 data = st.session_state.datasets
 if not data:
@@ -60,6 +74,8 @@ if not data:
 
 # ANALYSIS
 rows=[]
+spectra_matrix=[]
+labels=[]
 
 for i,(name,d) in enumerate(data.items()):
     if 280 not in d['spectra']: continue
@@ -73,9 +89,7 @@ for i,(name,d) in enumerate(data.items()):
     pie = y[i350]/y[i330] if y[i330]!=0 else np.nan
 
     peak_wl = wl[np.argmax(y)]
-
-    concentration = np.nan
-    agg_index = np.nan
+    peak_intensity = np.max(y)
 
     rows.append({
         "File":name,
@@ -83,64 +97,52 @@ for i,(name,d) in enumerate(data.items()):
         "IR/IF":irif,
         "I350/I330":pie,
         "λmax":peak_wl,
-        "Concentration":concentration,
-        "Aggregation Index":agg_index
+        "Peak Intensity":peak_intensity
     })
+
+    spectra_matrix.append(y)
+    labels.append(name)
 
 
 df = pd.DataFrame(rows)
 st.dataframe(df, use_container_width=True)
 
-# SPECTRA
-st.header("Spectra Overlay (Ex 280)")
+# -------- AVG + STD SPECTRA --------
+st.header("Average Spectrum ± STD")
+
+spectra_matrix = np.array(spectra_matrix)
+avg = np.mean(spectra_matrix, axis=0)
+stdev = np.std(spectra_matrix, axis=0)
+
+fig_avg = go.Figure()
+fig_avg.add_trace(go.Scatter(x=wl, y=avg, name='Mean'))
+fig_avg.add_trace(go.Scatter(x=wl, y=avg+stdev, name='+STD', line=dict(dash='dot')))
+fig_avg.add_trace(go.Scatter(x=wl, y=avg-stdev, name='-STD', line=dict(dash='dot')))
+
+st.plotly_chart(fig_avg, use_container_width=True)
+
+# -------- HEATMAP --------
+st.header("Metric Heatmap")
+heat = df[["IR/IF","I350/I330","λmax","Peak Intensity"]].values
+fig_heat = px.imshow(heat, labels=dict(x="Metric", y="Sample", color="Value"))
+st.plotly_chart(fig_heat, use_container_width=True)
+
+# -------- DERIVATIVE SPECTRA --------
+st.header("Derivative Spectra (280 nm)")
+fig_deriv = go.Figure()
+for name,d in data.items():
+    if 280 in d['spectra']:
+        deriv = np.gradient(d['spectra'][280])
+        fig_deriv.add_trace(go.Scatter(x=d['wavelengths'], y=deriv, name=name))
+st.plotly_chart(fig_deriv, use_container_width=True)
+
+# -------- STANDARD SPECTRA --------
+st.header("Spectra Overlay (280)")
 fig280 = go.Figure()
 for name,d in data.items():
     if 280 in d['spectra']:
         fig280.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][280], name=name))
 st.plotly_chart(fig280, use_container_width=True)
-
-st.header("Spectra Overlay (Ex 260)")
-fig260 = go.Figure()
-has260=False
-for name,d in data.items():
-    if 260 in d['spectra']:
-        has260=True
-        fig260.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][260], name=name))
-if has260:
-    st.plotly_chart(fig260, use_container_width=True)
-else:
-    st.info("No 260 nm spectra found")
-
-# NORMALIZATION FOR CLARITY
-norm_df = df.copy()
-for col in ['IR/IF','I350/I330']:
-    if norm_df[col].notna().any():
-        norm_df[col] = (norm_df[col] - norm_df[col].min())/(norm_df[col].max()-norm_df[col].min()+1e-9)
-
-# COMBINED PLOT WITH DUAL AXIS
-st.header("Normalized Metrics + Absorbance (Dual Axis)")
-
-fig = go.Figure()
-
-# primary axis (normalized metrics)
-fig.add_trace(go.Scatter(x=norm_df['Index'], y=norm_df['IR/IF'], mode='lines+markers', name='IR/IF (norm)', line=dict(width=3)))
-fig.add_trace(go.Scatter(x=norm_df['Index'], y=norm_df['I350/I330'], mode='lines+markers', name='I350/I330 (norm)', line=dict(width=3)))
-
-# secondary axis
-if df['Concentration'].notna().any():
-    fig.add_trace(go.Scatter(x=df['Index'], y=df['Concentration'], mode='lines+markers', name='Concentration', yaxis='y2'))
-
-if df['Aggregation Index'].notna().any():
-    fig.add_trace(go.Scatter(x=df['Index'], y=df['Aggregation Index'], mode='lines+markers', name='Aggregation Index', yaxis='y2'))
-
-fig.update_layout(
-    yaxis=dict(title="Normalized Metrics"),
-    yaxis2=dict(title="Absorbance Metrics", overlaying='y', side='right'),
-    xaxis_title="Sample Index",
-    title="Overlay with Dual Axis"
-)
-
-st.plotly_chart(fig, use_container_width=True)
 
 # EXPORT
 st.header("Export")
@@ -153,4 +155,4 @@ def build_zip():
     return buf
 
 if st.button('Build ZIP'):
-    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v9_2.zip')
+    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v9_3.zip')
