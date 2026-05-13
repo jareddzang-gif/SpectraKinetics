@@ -4,8 +4,9 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 import io, zipfile
-from scipy.integrate import simpson
-from scipy.stats import linregress
+
+# ✅ FIX: use numpy instead of scipy
+from numpy import trapz
 
 st.set_page_config(page_title='SpectraKinetics v8', layout='wide')
 
@@ -43,8 +44,7 @@ def parse_file(file_bytes, filename):
 
 
 def nearest(arr, val):
-    idx = np.argmin(np.abs(arr - val))
-    return idx
+    return np.argmin(np.abs(arr - val))
 
 # SIDEBAR
 with st.sidebar:
@@ -88,12 +88,12 @@ for i,(name,d) in enumerate(data.items()):
     irif = y[i280]/y[i340] if y[i340]!=0 else np.nan
     pie = y[i350]/y[i330] if y[i330]!=0 else np.nan
 
-    # area under curve (Rayleigh ~260-300, Fluorescence ~300-400)
+    # ✅ FIX: use trapz instead of simpson
     mask_ray = (wl>=260)&(wl<=300)
     mask_flu = (wl>=300)&(wl<=400)
 
-    auc_ray = simpson(y[mask_ray], wl[mask_ray])
-    auc_flu = simpson(y[mask_flu], wl[mask_flu])
+    auc_ray = trapz(y[mask_ray], wl[mask_ray])
+    auc_flu = trapz(y[mask_flu], wl[mask_flu])
 
     shift_ratio = auc_ray/auc_flu if auc_flu!=0 else np.nan
 
@@ -110,14 +110,22 @@ st.dataframe(df, use_container_width=True)
 fig_line = px.line(df.sort_values("Index"), x="Index", y="IR/IF", markers=True, title="IR/IF Trend")
 st.plotly_chart(fig_line, use_container_width=True)
 
-# LINEAR REGRESSION (blue shift)
+# LINEAR REGRESSION (manual, no scipy)
 if len(blue_shift_values) > 1:
-    slope, intercept, r, p, _ = linregress(file_index, blue_shift_values)
-    reg_line = [intercept + slope*x for x in file_index]
+    x = np.array(file_index)
+    y_vals = np.array(blue_shift_values)
+
+    coeffs = np.polyfit(x, y_vals, 1)
+    reg_line = coeffs[0]*x + coeffs[1]
+
+    # R^2
+    ss_res = np.sum((y_vals - reg_line)**2)
+    ss_tot = np.sum((y_vals - np.mean(y_vals))**2)
+    r2 = 1 - (ss_res/ss_tot if ss_tot!=0 else 0)
 
     fig_reg = go.Figure()
-    fig_reg.add_trace(go.Scatter(x=file_index,y=blue_shift_values, mode='markers', name='Shift'))
-    fig_reg.add_trace(go.Scatter(x=file_index,y=reg_line, mode='lines', name=f'Fit (R²={r**2:.3f})'))
+    fig_reg.add_trace(go.Scatter(x=x,y=y_vals, mode='markers', name='Shift'))
+    fig_reg.add_trace(go.Scatter(x=x,y=reg_line, mode='lines', name=f'Fit (R²={r2:.3f})'))
     fig_reg.update_layout(title="Blue Shift Regression")
     st.plotly_chart(fig_reg, use_container_width=True)
 
@@ -139,4 +147,4 @@ def build_zip():
     return buf
 
 if st.button("Build ZIP"):
-    st.download_button("Download", build_zip(), "spectrakinetics_v8.zip")
+    st.download_button("Download", build_zip(), "spectrakinetics_v8_fixed.zip")
