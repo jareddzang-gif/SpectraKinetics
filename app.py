@@ -5,7 +5,7 @@ import numpy as np
 import plotly.graph_objects as go
 import io, zipfile
 
-st.set_page_config(page_title='SpectraKinetics v9.1', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v9.2', layout='wide')
 
 if 'datasets' not in st.session_state:
     st.session_state.datasets = {}
@@ -52,9 +52,7 @@ with st.sidebar:
         for f in files[:200]:
             st.session_state.datasets[f.name] = parse_file(f.read(), f.name)
 
-    ex_choice = st.selectbox('Excitation', [280, 260])
-
-st.title("SpectraKinetics v9.1 — Clean Metrics View")
+st.title("SpectraKinetics v9.2 — Dual Axis Clean View")
 
 data = st.session_state.datasets
 if not data:
@@ -76,7 +74,6 @@ for i,(name,d) in enumerate(data.items()):
 
     peak_wl = wl[np.argmax(y)]
 
-    # optional absorbance-based placeholders
     concentration = np.nan
     agg_index = np.nan
 
@@ -94,25 +91,53 @@ for i,(name,d) in enumerate(data.items()):
 df = pd.DataFrame(rows)
 st.dataframe(df, use_container_width=True)
 
-# COMBINED MULTI-METRIC PLOT
-st.header("Combined Metrics Overlay")
+# SPECTRA
+st.header("Spectra Overlay (Ex 280)")
+fig280 = go.Figure()
+for name,d in data.items():
+    if 280 in d['spectra']:
+        fig280.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][280], name=name))
+st.plotly_chart(fig280, use_container_width=True)
+
+st.header("Spectra Overlay (Ex 260)")
+fig260 = go.Figure()
+has260=False
+for name,d in data.items():
+    if 260 in d['spectra']:
+        has260=True
+        fig260.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][260], name=name))
+if has260:
+    st.plotly_chart(fig260, use_container_width=True)
+else:
+    st.info("No 260 nm spectra found")
+
+# NORMALIZATION FOR CLARITY
+norm_df = df.copy()
+for col in ['IR/IF','I350/I330']:
+    if norm_df[col].notna().any():
+        norm_df[col] = (norm_df[col] - norm_df[col].min())/(norm_df[col].max()-norm_df[col].min()+1e-9)
+
+# COMBINED PLOT WITH DUAL AXIS
+st.header("Normalized Metrics + Absorbance (Dual Axis)")
 
 fig = go.Figure()
 
-fig.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], mode='lines+markers', name='IR/IF'))
-fig.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], mode='lines+markers', name='I350/I330'))
+# primary axis (normalized metrics)
+fig.add_trace(go.Scatter(x=norm_df['Index'], y=norm_df['IR/IF'], mode='lines+markers', name='IR/IF (norm)', line=dict(width=3)))
+fig.add_trace(go.Scatter(x=norm_df['Index'], y=norm_df['I350/I330'], mode='lines+markers', name='I350/I330 (norm)', line=dict(width=3)))
 
-# only plot optional metrics if data exists
+# secondary axis
 if df['Concentration'].notna().any():
-    fig.add_trace(go.Scatter(x=df['Index'], y=df['Concentration'], mode='lines+markers', name='Concentration'))
+    fig.add_trace(go.Scatter(x=df['Index'], y=df['Concentration'], mode='lines+markers', name='Concentration', yaxis='y2'))
 
 if df['Aggregation Index'].notna().any():
-    fig.add_trace(go.Scatter(x=df['Index'], y=df['Aggregation Index'], mode='lines+markers', name='Aggregation Index'))
+    fig.add_trace(go.Scatter(x=df['Index'], y=df['Aggregation Index'], mode='lines+markers', name='Aggregation Index', yaxis='y2'))
 
 fig.update_layout(
-    title="All Metrics Overlay",
+    yaxis=dict(title="Normalized Metrics"),
+    yaxis2=dict(title="Absorbance Metrics", overlaying='y', side='right'),
     xaxis_title="Sample Index",
-    yaxis_title="Value"
+    title="Overlay with Dual Axis"
 )
 
 st.plotly_chart(fig, use_container_width=True)
@@ -128,4 +153,4 @@ def build_zip():
     return buf
 
 if st.button('Build ZIP'):
-    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v9_1_clean.zip')
+    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v9_2.zip')
