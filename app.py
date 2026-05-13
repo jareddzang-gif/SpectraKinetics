@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 import io, zipfile, re
 
-st.set_page_config(page_title='SpectraKinetics v11.2', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v11.3', layout='wide')
 
 # NAV
 page = st.sidebar.radio("Navigation", ["Spectra Analysis", "Kinetics"])
@@ -171,48 +171,67 @@ if page == "Spectra Analysis":
     st.plotly_chart(fig2, use_container_width=True, key="metrics_plot")
 
 # =====================================================
-# KINETICS PAGE (DUAL WAVELENGTH SINGLE PLOT)
+# KINETICS PAGE (MERGED SINGLE TIMELINE)
 # =====================================================
 if page == "Kinetics":
 
-    st.title("Kinetics Analysis (Dual Wavelength)")
+    st.title("Kinetics Analysis (Merged Timeline)")
 
-    found = False
+    segments_280 = []
+    segments_350 = []
 
-    for name, d in data.items():
-        if d['kinetics'] is not None:
-            found = True
+    # sort by filename (timestamp)
+    sorted_items = sorted(data.items(), key=lambda x: x[0])
 
-            kin = d['kinetics']
-            st.subheader(name)
+    time_offset = 0
 
-            times = kin['times']
-            wl = kin['wavelengths']
-            matrix = kin['matrix']
+    for name, d in sorted_items:
+        if d['kinetics'] is None:
+            continue
 
-            idx_280 = np.argmin(np.abs(wl-280))
-            idx_350 = np.argmin(np.abs(wl-350))
+        kin = d['kinetics']
 
-            signal_280 = matrix[idx_280,:]
-            signal_350 = matrix[idx_350,:]
+        times = kin['times']
+        wl = kin['wavelengths']
+        matrix = kin['matrix']
 
-            fig_k = go.Figure()
+        idx_280 = np.argmin(np.abs(wl-280))
+        idx_350 = np.argmin(np.abs(wl-350))
 
-            fig_k.add_trace(go.Scatter(x=times, y=signal_280,
-                                       name='280 nm (IR)', mode='lines'))
+        signal_280 = matrix[idx_280,:]
+        signal_350 = matrix[idx_350,:]
 
-            fig_k.add_trace(go.Scatter(x=times, y=signal_350,
-                                       name='350 nm (IF)', mode='lines'))
+        # shift time so segments connect
+        shifted_time = times + time_offset
 
-            fig_k.update_layout(
-                title="Dual-Wavelength Kinetics",
-                xaxis_title="Time (s)",
-                yaxis_title="Intensity"
-            )
+        segments_280.append((shifted_time, signal_280))
+        segments_350.append((shifted_time, signal_350))
 
-            st.plotly_chart(fig_k, use_container_width=True, key=f"kin_dual_{name}")
+        time_offset = shifted_time[-1]
 
-    if not found:
+    if len(segments_280) > 0:
+
+        fig_k = go.Figure()
+
+        for i,(t,y) in enumerate(segments_280):
+            fig_k.add_trace(go.Scatter(x=t, y=y,
+                                       name=f'280 nm (IR) run {i+1}',
+                                       mode='lines'))
+
+        for i,(t,y) in enumerate(segments_350):
+            fig_k.add_trace(go.Scatter(x=t, y=y,
+                                       name=f'350 nm (IF) run {i+1}',
+                                       mode='lines'))
+
+        fig_k.update_layout(
+            title="Merged Kinetics Timeline",
+            xaxis_title="Time (s)",
+            yaxis_title="Intensity"
+        )
+
+        st.plotly_chart(fig_k, use_container_width=True, key="kinetics_merged")
+
+    else:
         st.info("No kinetics data detected in uploaded files.")
 
 # EXPORT
@@ -222,4 +241,4 @@ if st.sidebar.button("Download Analysis CSV"):
     with zipfile.ZipFile(buf,'w') as z:
         z.writestr('analysis.csv', df.to_csv(index=False) if 'df' in locals() else "")
     buf.seek(0)
-    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_2.zip")
+    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_3.zip")
