@@ -4,12 +4,12 @@ import numpy as np
 import plotly.graph_objects as go
 import io, zipfile, re
 
-st.set_page_config(page_title='SpectraKinetics v11 (Multi-page)', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v11.1', layout='wide')
 
-# ---------------- NAVIGATION ----------------
+# NAV
 page = st.sidebar.radio("Navigation", ["Spectra Analysis", "Kinetics"])
 
-# ---------------- LOGO ----------------
+# LOGO
 st.markdown("""
 <div style='text-align:center;'>
 <h1 style='color:#0B3D91; font-size:60px;'>NBL</h1>
@@ -35,11 +35,9 @@ def parse_file(file_bytes, filename):
     ex_vals = []
     kinetics = None
 
-    # --- KINETICS DETECTION ---
     for i, line in enumerate(content):
         if "kinetic time" in line.lower():
             parts = line.split("	")
-
             blank_idx = next((j for j,p in enumerate(parts) if p.strip()==""), None)
 
             if blank_idx is not None:
@@ -60,7 +58,6 @@ def parse_file(file_bytes, filename):
                     "matrix": np.array(mat)
                 }
 
-    # --- NORMAL SPECTRA ---
     for i, line in enumerate(content):
         parts = line.split("	")
         if 'excitation wavelength' in parts[0].lower():
@@ -89,7 +86,7 @@ def parse_file(file_bytes, filename):
         'kinetics': kinetics
     }
 
-# ---------------- UPLOAD ----------------
+# UPLOAD
 files = st.sidebar.file_uploader("Upload ≤200 files", type=['txt'], accept_multiple_files=True)
 ex_toggle = st.sidebar.radio("Spectra View", [280, 260])
 
@@ -105,7 +102,7 @@ if not data:
     st.stop()
 
 # =====================================================
-# PAGE 1: SPECTRA ANALYSIS
+# SPECTRA PAGE
 # =====================================================
 if page == "Spectra Analysis":
 
@@ -138,11 +135,17 @@ if page == "Spectra Analysis":
         irif = y[nearest(280)]/y[nearest(340)] if y[nearest(340)]!=0 else np.nan
         pie = y[nearest(350)]/y[nearest(330)] if y[nearest(330)]!=0 else np.nan
 
+        # placeholders (auto-hidden in graph if unused)
+        agg = np.nan
+        conc = np.nan
+
         rows.append({
             "File":name,
             "Index":i,
             "IR/IF":irif,
             "I350/I330":pie,
+            "Aggregation Index":agg,
+            "Concentration":conc,
             "IR Peak (nm)":ir_peak,
             "IR Peak Intensity":ir_int,
             "IF Peak (nm)":if_peak,
@@ -152,7 +155,7 @@ if page == "Spectra Analysis":
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True)
 
-    # Spectra plot
+    # -------- Spectra (unchanged) --------
     st.header(f"Spectra Overlay (Ex {ex_toggle})")
     fig = go.Figure()
     for name,d in data.items():
@@ -161,8 +164,30 @@ if page == "Spectra Analysis":
 
     st.plotly_chart(fig, use_container_width=True, key=f"spectra_{ex_toggle}")
 
+    # -------- Combined Metrics Plot --------
+    st.header("Combined Metrics Overlay")
+
+    fig2 = go.Figure()
+
+    fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF', mode='lines+markers'))
+    fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330', mode='lines+markers'))
+
+    if df['Aggregation Index'].notna().any():
+        fig2.add_trace(go.Scatter(x=df['Index'], y=df['Aggregation Index'], name='Aggregation Index', mode='lines+markers', yaxis='y2'))
+
+    if df['Concentration'].notna().any():
+        fig2.add_trace(go.Scatter(x=df['Index'], y=df['Concentration'], name='Concentration', mode='lines+markers', yaxis='y2'))
+
+    fig2.update_layout(
+        yaxis=dict(title="Fluorescence Ratios"),
+        yaxis2=dict(title="Absorbance Metrics", overlaying='y', side='right'),
+        title="All Key Metrics"
+    )
+
+    st.plotly_chart(fig2, use_container_width=True, key="metrics_plot")
+
 # =====================================================
-# PAGE 2: KINETICS
+# KINETICS PAGE
 # =====================================================
 if page == "Kinetics":
 
@@ -193,11 +218,11 @@ if page == "Kinetics":
     if not found:
         st.info("No kinetics data detected in uploaded files.")
 
-# ---------------- EXPORT ----------------
+# EXPORT
 st.sidebar.markdown("---")
 if st.sidebar.button("Download Analysis CSV"):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf,'w') as z:
         z.writestr('analysis.csv', df.to_csv(index=False) if 'df' in locals() else "")
     buf.seek(0)
-    st.sidebar.download_button("Download", buf, "spectrakinetics_v11.zip")
+    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_1.zip")
