@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 import io, zipfile, re
 
-st.set_page_config(page_title='SpectraKinetics v11.3', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v11.3.1', layout='wide')
 
 # NAV
 page = st.sidebar.radio("Navigation", ["Spectra Analysis", "Kinetics"])
@@ -75,8 +75,8 @@ def parse_file(file_bytes, filename):
         except:
             continue
 
-    matrix = np.array(matrix)
-    for j, ex in enumerate(ex_vals):
+    matrix = np.array(matrix) if len(matrix)>0 else np.array([])
+    for j, ex in enumerate(ex_vals if len(matrix)>0 else []):
         spectra[ex] = matrix[:, j]
 
     return {
@@ -101,9 +101,7 @@ data = st.session_state.datasets
 if not data:
     st.stop()
 
-# =====================================================
-# SPECTRA PAGE (UNCHANGED)
-# =====================================================
+# ===================== SPECTRA PAGE (UNCHANGED) =====================
 if page == "Spectra Analysis":
 
     st.title("Spectra Analysis")
@@ -135,20 +133,11 @@ if page == "Spectra Analysis":
         irif = y[nearest(280)]/y[nearest(340)] if y[nearest(340)]!=0 else np.nan
         pie = y[nearest(350)]/y[nearest(330)] if y[nearest(330)]!=0 else np.nan
 
-        agg = np.nan
-        conc = np.nan
-
         rows.append({
             "File":name,
             "Index":i,
             "IR/IF":irif,
-            "I350/I330":pie,
-            "Aggregation Index":agg,
-            "Concentration":conc,
-            "IR Peak (nm)":ir_peak,
-            "IR Peak Intensity":ir_int,
-            "IF Peak (nm)":if_peak,
-            "IF Peak Intensity":if_int
+            "I350/I330":pie
         })
 
     df = pd.DataFrame(rows)
@@ -162,27 +151,14 @@ if page == "Spectra Analysis":
 
     st.plotly_chart(fig, use_container_width=True, key=f"spectra_{ex_toggle}")
 
-    st.header("Combined Metrics Overlay")
-    fig2 = go.Figure()
-
-    fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF', mode='lines+markers'))
-    fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330', mode='lines+markers'))
-
-    st.plotly_chart(fig2, use_container_width=True, key="metrics_plot")
-
-# =====================================================
-# KINETICS PAGE (MERGED SINGLE TIMELINE)
-# =====================================================
+# ===================== KINETICS PAGE FIXED =====================
 if page == "Kinetics":
 
     st.title("Kinetics Analysis (Merged Timeline)")
 
-    segments_280 = []
-    segments_350 = []
+    segments_280, segments_350 = [], []
 
-    # sort by filename (timestamp)
     sorted_items = sorted(data.items(), key=lambda x: x[0])
-
     time_offset = 0
 
     for name, d in sorted_items:
@@ -190,10 +166,17 @@ if page == "Kinetics":
             continue
 
         kin = d['kinetics']
-
         times = kin['times']
+        
+        # ✅ CRITICAL FIX
+        if len(times) == 0:
+            continue
+
         wl = kin['wavelengths']
         matrix = kin['matrix']
+
+        if len(wl) == 0 or matrix.size == 0:
+            continue
 
         idx_280 = np.argmin(np.abs(wl-280))
         idx_350 = np.argmin(np.abs(wl-350))
@@ -201,38 +184,29 @@ if page == "Kinetics":
         signal_280 = matrix[idx_280,:]
         signal_350 = matrix[idx_350,:]
 
-        # shift time so segments connect
         shifted_time = times + time_offset
 
         segments_280.append((shifted_time, signal_280))
         segments_350.append((shifted_time, signal_350))
 
-        time_offset = shifted_time[-1]
+        # ✅ SAFER OFFSET UPDATE
+        time_offset += (times[-1] - times[0])
 
     if len(segments_280) > 0:
-
         fig_k = go.Figure()
 
         for i,(t,y) in enumerate(segments_280):
-            fig_k.add_trace(go.Scatter(x=t, y=y,
-                                       name=f'280 nm (IR) run {i+1}',
-                                       mode='lines'))
+            fig_k.add_trace(go.Scatter(x=t, y=y, name=f'280 nm run {i+1}', mode='lines'))
 
         for i,(t,y) in enumerate(segments_350):
-            fig_k.add_trace(go.Scatter(x=t, y=y,
-                                       name=f'350 nm (IF) run {i+1}',
-                                       mode='lines'))
+            fig_k.add_trace(go.Scatter(x=t, y=y, name=f'350 nm run {i+1}', mode='lines'))
 
-        fig_k.update_layout(
-            title="Merged Kinetics Timeline",
-            xaxis_title="Time (s)",
-            yaxis_title="Intensity"
-        )
+        fig_k.update_layout(title="Merged Kinetics Timeline", xaxis_title="Time (s)", yaxis_title="Intensity")
 
         st.plotly_chart(fig_k, use_container_width=True, key="kinetics_merged")
 
     else:
-        st.info("No kinetics data detected in uploaded files.")
+        st.info("No valid kinetics data detected.")
 
 # EXPORT
 st.sidebar.markdown("---")
@@ -241,4 +215,4 @@ if st.sidebar.button("Download Analysis CSV"):
     with zipfile.ZipFile(buf,'w') as z:
         z.writestr('analysis.csv', df.to_csv(index=False) if 'df' in locals() else "")
     buf.seek(0)
-    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_3.zip")
+    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_3_1.zip")
