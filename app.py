@@ -5,12 +5,13 @@ import plotly.graph_objects as go
 import plotly.express as px
 import io, zipfile
 
-st.set_page_config(page_title='SpectraKinetics v8', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v8.1', layout='wide')
 
 if 'datasets' not in st.session_state:
     st.session_state.datasets = {}
 
-# ✅ UNIVERSAL AUC (NO NUMPY/SCIPY DEPENDENCY)
+# SAFE AUC
+
 def safe_trapz(y, x):
     y = np.array(y)
     x = np.array(x)
@@ -23,7 +24,7 @@ def parse_file(file_bytes, filename):
     spectra, wavelengths, ex_vals = {}, [], []
 
     for i, line in enumerate(content):
-        parts = line.split('	')
+        parts = line.split("	")
         if 'excitation wavelength' in parts[0].lower():
             ex_vals = [float(v) for v in parts[2:] if v]
         if parts[0].isdigit():
@@ -32,7 +33,7 @@ def parse_file(file_bytes, filename):
 
     matrix = []
     for line in content[data_start:]:
-        parts = line.split('	')
+        parts = line.split("	")
         try:
             wavelengths.append(float(parts[1]))
             matrix.append([float(x) for x in parts[2:2+len(ex_vals)]])
@@ -60,7 +61,7 @@ with st.sidebar:
 
     ex_choice = st.selectbox('Excitation', [280, 260])
 
-st.title("SpectraKinetics v8 — Cloud-Safe Final")
+st.title("SpectraKinetics v8.1 — Advanced Analysis")
 
 data = st.session_state.datasets
 if not data:
@@ -77,8 +78,11 @@ st.plotly_chart(fig, use_container_width=True)
 # ANALYSIS
 st.header("Batch Analysis")
 rows=[]
-blue_shift_values=[]
-file_index=[]
+
+indices=[]
+irif_vals=[]
+pie_vals=[]
+shift_vals=[]
 
 for i,(name,d) in enumerate(data.items()):
     if 280 not in d['spectra']: continue
@@ -91,52 +95,79 @@ for i,(name,d) in enumerate(data.items()):
     irif = y[i280]/y[i340] if y[i340]!=0 else np.nan
     pie = y[i350]/y[i330] if y[i330]!=0 else np.nan
 
+    # Peak tracking
+    peak_idx = np.argmax(y)
+    peak_wl = wl[peak_idx]
+
+    # AUC
     mask_ray = (wl>=260)&(wl<=300)
     mask_flu = (wl>=300)&(wl<=400)
-
-    # ✅ FINAL FIX: custom trapezoid
     auc_ray = safe_trapz(y[mask_ray], wl[mask_ray])
     auc_flu = safe_trapz(y[mask_flu], wl[mask_flu])
-
     shift_ratio = auc_ray/auc_flu if auc_flu!=0 else np.nan
 
-    rows.append({"File":name,"Index":i,"IR/IF":irif,"I350/I330":pie,"Shift Ratio":shift_ratio})
+    # Classification
+    if peak_wl < 330:
+        state = "Blue Shift (Aggregated)"
+    elif peak_wl > 350:
+        state = "Red Shift (Unfolded)"
+    else:
+        state = "Native"
 
-    blue_shift_values.append(shift_ratio)
-    file_index.append(i)
+    rows.append({
+        "File":name,
+        "Index":i,
+        "IR/IF":irif,
+        "I350/I330":pie,
+        "Shift Ratio":shift_ratio,
+        "Peak λmax":peak_wl,
+        "State":state
+    })
+
+    indices.append(i)
+    irif_vals.append(irif)
+    pie_vals.append(pie)
+    shift_vals.append(shift_ratio)
 
 
 df = pd.DataFrame(rows)
 st.dataframe(df, use_container_width=True)
 
-# IR/IF Line Plot
-fig_line = px.line(df.sort_values("Index"), x="Index", y="IR/IF", markers=True, title="IR/IF Trend")
-st.plotly_chart(fig_line, use_container_width=True)
+# REGRESSION FUNCTION
 
-# Regression
-if len(blue_shift_values) > 1:
-    x = np.array(file_index)
-    y_vals = np.array(blue_shift_values)
+def regression_plot(x, y, title, label):
+    if len(y) > 1:
+        x_arr = np.array(x)
+        y_arr = np.array(y)
 
-    coeffs = np.polyfit(x, y_vals, 1)
-    reg_line = coeffs[0]*x + coeffs[1]
+        coeffs = np.polyfit(x_arr, y_arr, 1)
+        reg_line = coeffs[0]*x_arr + coeffs[1]
 
-    ss_res = np.sum((y_vals - reg_line)**2)
-    ss_tot = np.sum((y_vals - np.mean(y_vals))**2)
-    r2 = 1 - (ss_res/ss_tot if ss_tot!=0 else 0)
+        ss_res = np.sum((y_arr - reg_line)**2)
+        ss_tot = np.sum((y_arr - np.mean(y_arr))**2)
+        r2 = 1 - (ss_res/ss_tot if ss_tot!=0 else 0)
 
-    fig_reg = go.Figure()
-    fig_reg.add_trace(go.Scatter(x=x,y=y_vals, mode='markers', name='Shift'))
-    fig_reg.add_trace(go.Scatter(x=x,y=reg_line, mode='lines', name=f'Fit (R²={r2:.3f})'))
-    st.plotly_chart(fig_reg, use_container_width=True)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=x_arr, y=y_arr, mode='markers', name=label))
+        fig.add_trace(go.Scatter(x=x_arr, y=reg_line, mode='lines', name=f'Fit (R²={r2:.3f})'))
+        fig.update_layout(title=title)
+        st.plotly_chart(fig, use_container_width=True)
+
+# PLOTS
+regression_plot(indices, irif_vals, "IR/IF Regression", "IR/IF")
+regression_plot(indices, pie_vals, "I350/I330 Regression", "I350/I330")
+regression_plot(indices, shift_vals, "Shift Ratio Regression", "Shift Ratio")
 
 # EXPORT
-st.header("Export Full Bundle")
+st.header("Export Full Report")
 
 def build_zip():
     buf = io.BytesIO()
     with zipfile.ZipFile(buf,'w') as z:
         z.writestr("analysis.csv", df.to_csv(index=False))
+
+        summary = df.describe(include='all').to_string()
+        z.writestr("summary.txt", summary)
 
         for name,d in data.items():
             spec = pd.DataFrame({'Wavelength':d['wavelengths']})
@@ -147,5 +178,5 @@ def build_zip():
     buf.seek(0)
     return buf
 
-if st.button("Build ZIP"):
-    st.download_button("Download", build_zip(), "spectrakinetics_v8_final.zip")
+if st.button("Build Full Report ZIP"):
+    st.download_button("Download Report", build_zip(), "spectrakinetics_v8_1_report.zip")
