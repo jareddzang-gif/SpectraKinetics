@@ -1,14 +1,12 @@
-from plotly.subplots import make_subplots
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import io, zipfile
-import re
+import io, zipfile, re
 
-st.set_page_config(page_title='SpectraKinetics v9.5', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v9.6', layout='wide')
 
-# ---------------- LOGO ----------------
+# LOGO
 st.markdown("""
 <div style='text-align:center;'>
 <h1 style='color:#0B3D91; font-size:60px;'>NBL</h1>
@@ -18,12 +16,14 @@ st.markdown("""
 if 'datasets' not in st.session_state:
     st.session_state.datasets = {}
 
-# ---------------- RENAME FILE ----------------
+# CLEAN NAME
+
 def clean_filename(name):
     match = re.search(r"(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})", name)
     return match.group(1) if match else name[:15]
 
-# ---------------- PARSER ----------------
+# PARSER
+
 def parse_file(file_bytes, filename):
     content = file_bytes.decode('utf-8', errors='replace').splitlines()
     spectra, wavelengths, ex_vals = {}, [], []
@@ -51,13 +51,10 @@ def parse_file(file_bytes, filename):
 
     return {'wavelengths': np.array(wavelengths), 'spectra': spectra, 'filename': clean_filename(filename)}
 
-
-def nearest(arr, val):
-    return np.argmin(np.abs(arr - val))
-
 # SIDEBAR
 with st.sidebar:
     files = st.file_uploader("Upload ≤200 files", type=['txt'], accept_multiple_files=True)
+    ex_toggle = st.radio("Spectra View", [280, 260])
 
     if files:
         st.session_state.datasets = {}
@@ -65,7 +62,7 @@ with st.sidebar:
             parsed = parse_file(f.read(), f.name)
             st.session_state.datasets[parsed['filename']] = parsed
 
-st.title("SpectraKinetics v9.5 — Peak Analysis Upgrade")
+st.title("SpectraKinetics v9.6 — Final Workflow")
 
 data = st.session_state.datasets
 if not data:
@@ -73,80 +70,84 @@ if not data:
 
 # ANALYSIS
 rows=[]
-spectra280=[]
-spectra260=[]
 
 for i,(name,d) in enumerate(data.items()):
     if 280 not in d['spectra']: continue
 
     wl = d['wavelengths']
-    y280 = d['spectra'][280]
+    y = d['spectra'][280]
 
-    # IR (Rayleigh/Mie region peak - global max)
-    ir_idx = np.argmax(y280)
-    ir_peak_wl = wl[ir_idx]
-    ir_peak_intensity = y280[ir_idx]
+    # IR peak
+    ir_idx = np.argmax(y)
+    ir_peak = wl[ir_idx]
+    ir_int = y[ir_idx]
 
-    # IF (fluorescence region 300–390)
-    mask_if = (wl >= 300) & (wl <= 390)
-    if np.any(mask_if):
-        y_if = y280[mask_if]
-        wl_if = wl[mask_if]
-        if_idx_local = np.argmax(y_if)
-        if_peak_wl = wl_if[if_idx_local]
-        if_peak_intensity = y_if[if_idx_local]
+    # IF peak
+    mask = (wl>=300)&(wl<=390)
+    if np.any(mask):
+        y_if = y[mask]
+        wl_if = wl[mask]
+        idx = np.argmax(y_if)
+        if_peak = wl_if[idx]
+        if_int = y_if[idx]
     else:
-        if_peak_wl = np.nan
-        if_peak_intensity = np.nan
+        if_peak = np.nan
+        if_int = np.nan
 
-    # Ratios (unchanged)
-    i280 = nearest(wl,280)
-    i340 = nearest(wl,340)
-    i350 = nearest(wl,350)
-    i330 = nearest(wl,330)
+    # ratios
+    nearest = lambda v: np.argmin(np.abs(wl-v))
+    irif = y[nearest(280)]/y[nearest(340)] if y[nearest(340)]!=0 else np.nan
+    pie = y[nearest(350)]/y[nearest(330)] if y[nearest(330)]!=0 else np.nan
 
-    irif = y280[i280]/y280[i340] if y280[i340]!=0 else np.nan
-    pie = y280[i350]/y280[i330] if y280[i330]!=0 else np.nan
+    # placeholders absorbance
+    conc = np.nan
+    agg = np.nan
 
     rows.append({
         "File":name,
         "Index":i,
         "IR/IF":irif,
         "I350/I330":pie,
-        "IR Peak (nm)":ir_peak_wl,
-        "IR Peak Intensity":ir_peak_intensity,
-        "IF Peak (nm)":if_peak_wl,
-        "IF Peak Intensity":if_peak_intensity
+        "Aggregation Index":agg,
+        "Concentration":conc,
+        "IR Peak (nm)":ir_peak,
+        "IR Peak Intensity":ir_int,
+        "IF Peak (nm)":if_peak,
+        "IF Peak Intensity":if_int
     })
 
-    spectra280.append(y280)
-    if 260 in d['spectra']:
-        spectra260.append(d['spectra'][260])
-
-
+# DF
 df = pd.DataFrame(rows)
 st.dataframe(df, use_container_width=True)
 
-# -------- OVERLAY SPECTRA 280 --------
-st.header("Spectra Overlay (280 nm)")
-fig280 = go.Figure()
+# SPECTRA VIEW BASED ON TOGGLE
+st.header(f"Spectra Overlay (Ex {ex_toggle} nm)")
+fig = go.Figure()
 for name,d in data.items():
-    if 280 in d['spectra']:
-        fig280.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][280], name=name))
-st.plotly_chart(fig280, use_container_width=True)
+    if ex_toggle in d['spectra']:
+        fig.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][ex_toggle], name=name))
+st.plotly_chart(fig, use_container_width=True)
 
-# -------- OVERLAY SPECTRA 260 --------
-st.header("Spectra Overlay (260 nm)")
-fig260 = go.Figure()
-has260=False
-for name,d in data.items():
-    if 260 in d['spectra']:
-        has260=True
-        fig260.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][260], name=name))
-if has260:
-    st.plotly_chart(fig260, use_container_width=True)
-else:
-    st.info("No 260 nm spectra found")
+# COMBINED METRICS GRAPH
+st.header("Combined Metrics (Overlay)")
+fig2 = go.Figure()
+
+fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF', mode='lines+markers'))
+fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330', mode='lines+markers'))
+
+if df['Aggregation Index'].notna().any():
+    fig2.add_trace(go.Scatter(x=df['Index'], y=df['Aggregation Index'], name='Aggregation Index', mode='lines+markers', yaxis='y2'))
+
+if df['Concentration'].notna().any():
+    fig2.add_trace(go.Scatter(x=df['Index'], y=df['Concentration'], name='Concentration', mode='lines+markers', yaxis='y2'))
+
+fig2.update_layout(
+    yaxis=dict(title="Fluorescence Ratios"),
+    yaxis2=dict(title="Absorbance Metrics", overlaying='y', side='right'),
+    title="All Key Metrics"
+)
+
+st.plotly_chart(fig2, use_container_width=True)
 
 # EXPORT
 st.header("Export")
@@ -159,4 +160,4 @@ def build_zip():
     return buf
 
 if st.button('Build ZIP'):
-    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v9_5.zip')
+    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v9_6.zip')
