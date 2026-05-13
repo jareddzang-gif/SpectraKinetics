@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 import io, zipfile, re
 
-st.set_page_config(page_title='SpectraKinetics v11.1', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v11.2', layout='wide')
 
 # NAV
 page = st.sidebar.radio("Navigation", ["Spectra Analysis", "Kinetics"])
@@ -102,7 +102,7 @@ if not data:
     st.stop()
 
 # =====================================================
-# SPECTRA PAGE
+# SPECTRA PAGE (UNCHANGED)
 # =====================================================
 if page == "Spectra Analysis":
 
@@ -135,7 +135,6 @@ if page == "Spectra Analysis":
         irif = y[nearest(280)]/y[nearest(340)] if y[nearest(340)]!=0 else np.nan
         pie = y[nearest(350)]/y[nearest(330)] if y[nearest(330)]!=0 else np.nan
 
-        # placeholders (auto-hidden in graph if unused)
         agg = np.nan
         conc = np.nan
 
@@ -155,7 +154,6 @@ if page == "Spectra Analysis":
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True)
 
-    # -------- Spectra (unchanged) --------
     st.header(f"Spectra Overlay (Ex {ex_toggle})")
     fig = go.Figure()
     for name,d in data.items():
@@ -164,34 +162,20 @@ if page == "Spectra Analysis":
 
     st.plotly_chart(fig, use_container_width=True, key=f"spectra_{ex_toggle}")
 
-    # -------- Combined Metrics Plot --------
     st.header("Combined Metrics Overlay")
-
     fig2 = go.Figure()
 
     fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF', mode='lines+markers'))
     fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330', mode='lines+markers'))
 
-    if df['Aggregation Index'].notna().any():
-        fig2.add_trace(go.Scatter(x=df['Index'], y=df['Aggregation Index'], name='Aggregation Index', mode='lines+markers', yaxis='y2'))
-
-    if df['Concentration'].notna().any():
-        fig2.add_trace(go.Scatter(x=df['Index'], y=df['Concentration'], name='Concentration', mode='lines+markers', yaxis='y2'))
-
-    fig2.update_layout(
-        yaxis=dict(title="Fluorescence Ratios"),
-        yaxis2=dict(title="Absorbance Metrics", overlaying='y', side='right'),
-        title="All Key Metrics"
-    )
-
     st.plotly_chart(fig2, use_container_width=True, key="metrics_plot")
 
 # =====================================================
-# KINETICS PAGE
+# KINETICS PAGE (DUAL WAVELENGTH SINGLE PLOT)
 # =====================================================
 if page == "Kinetics":
 
-    st.title("Kinetics Analysis")
+    st.title("Kinetics Analysis (Dual Wavelength)")
 
     found = False
 
@@ -206,14 +190,27 @@ if page == "Kinetics":
             wl = kin['wavelengths']
             matrix = kin['matrix']
 
-            idx = np.argmin(np.abs(wl-350))
-            signal = matrix[idx,:]
+            idx_280 = np.argmin(np.abs(wl-280))
+            idx_350 = np.argmin(np.abs(wl-350))
+
+            signal_280 = matrix[idx_280,:]
+            signal_350 = matrix[idx_350,:]
 
             fig_k = go.Figure()
-            fig_k.add_trace(go.Scatter(x=times, y=signal, mode='lines'))
-            fig_k.update_layout(title="Intensity vs Time (350 nm)")
 
-            st.plotly_chart(fig_k, use_container_width=True, key=f"kin_{name}")
+            fig_k.add_trace(go.Scatter(x=times, y=signal_280,
+                                       name='280 nm (IR)', mode='lines'))
+
+            fig_k.add_trace(go.Scatter(x=times, y=signal_350,
+                                       name='350 nm (IF)', mode='lines'))
+
+            fig_k.update_layout(
+                title="Dual-Wavelength Kinetics",
+                xaxis_title="Time (s)",
+                yaxis_title="Intensity"
+            )
+
+            st.plotly_chart(fig_k, use_container_width=True, key=f"kin_dual_{name}")
 
     if not found:
         st.info("No kinetics data detected in uploaded files.")
@@ -225,4 +222,4 @@ if st.sidebar.button("Download Analysis CSV"):
     with zipfile.ZipFile(buf,'w') as z:
         z.writestr('analysis.csv', df.to_csv(index=False) if 'df' in locals() else "")
     buf.seek(0)
-    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_1.zip")
+    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_2.zip")
