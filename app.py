@@ -3,11 +3,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
 import io, zipfile
 import re
 
-st.set_page_config(page_title='SpectraKinetics v9.3', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v9.5', layout='wide')
 
 # ---------------- LOGO ----------------
 st.markdown("""
@@ -66,7 +65,7 @@ with st.sidebar:
             parsed = parse_file(f.read(), f.name)
             st.session_state.datasets[parsed['filename']] = parsed
 
-st.title("SpectraKinetics v9.3 — Enhanced Analysis")
+st.title("SpectraKinetics v9.5 — Peak Analysis Upgrade")
 
 data = st.session_state.datasets
 if not data:
@@ -74,75 +73,80 @@ if not data:
 
 # ANALYSIS
 rows=[]
-spectra_matrix=[]
-labels=[]
+spectra280=[]
+spectra260=[]
 
 for i,(name,d) in enumerate(data.items()):
     if 280 not in d['spectra']: continue
 
     wl = d['wavelengths']
-    y = d['spectra'][280]
+    y280 = d['spectra'][280]
 
-    i280,i340,i350,i330 = [nearest(wl,x) for x in (280,340,350,330)]
+    # IR (Rayleigh/Mie region peak - global max)
+    ir_idx = np.argmax(y280)
+    ir_peak_wl = wl[ir_idx]
+    ir_peak_intensity = y280[ir_idx]
 
-    irif = y[i280]/y[i340] if y[i340]!=0 else np.nan
-    pie = y[i350]/y[i330] if y[i330]!=0 else np.nan
+    # IF (fluorescence region 300–390)
+    mask_if = (wl >= 300) & (wl <= 390)
+    if np.any(mask_if):
+        y_if = y280[mask_if]
+        wl_if = wl[mask_if]
+        if_idx_local = np.argmax(y_if)
+        if_peak_wl = wl_if[if_idx_local]
+        if_peak_intensity = y_if[if_idx_local]
+    else:
+        if_peak_wl = np.nan
+        if_peak_intensity = np.nan
 
-    peak_wl = wl[np.argmax(y)]
-    peak_intensity = np.max(y)
+    # Ratios (unchanged)
+    i280 = nearest(wl,280)
+    i340 = nearest(wl,340)
+    i350 = nearest(wl,350)
+    i330 = nearest(wl,330)
+
+    irif = y280[i280]/y280[i340] if y280[i340]!=0 else np.nan
+    pie = y280[i350]/y280[i330] if y280[i330]!=0 else np.nan
 
     rows.append({
         "File":name,
         "Index":i,
         "IR/IF":irif,
         "I350/I330":pie,
-        "λmax":peak_wl,
-        "Peak Intensity":peak_intensity
+        "IR Peak (nm)":ir_peak_wl,
+        "IR Peak Intensity":ir_peak_intensity,
+        "IF Peak (nm)":if_peak_wl,
+        "IF Peak Intensity":if_peak_intensity
     })
 
-    spectra_matrix.append(y)
-    labels.append(name)
+    spectra280.append(y280)
+    if 260 in d['spectra']:
+        spectra260.append(d['spectra'][260])
 
 
 df = pd.DataFrame(rows)
 st.dataframe(df, use_container_width=True)
 
-# -------- AVG + STD SPECTRA --------
-st.header("Average Spectrum ± STD")
-
-spectra_matrix = np.array(spectra_matrix)
-avg = np.mean(spectra_matrix, axis=0)
-stdev = np.std(spectra_matrix, axis=0)
-
-fig_avg = go.Figure()
-fig_avg.add_trace(go.Scatter(x=wl, y=avg, name='Mean'))
-fig_avg.add_trace(go.Scatter(x=wl, y=avg+stdev, name='+STD', line=dict(dash='dot')))
-fig_avg.add_trace(go.Scatter(x=wl, y=avg-stdev, name='-STD', line=dict(dash='dot')))
-
-st.plotly_chart(fig_avg, use_container_width=True)
-
-# -------- HEATMAP --------
-st.header("Metric Heatmap")
-heat = df[["IR/IF","I350/I330","λmax","Peak Intensity"]].values
-fig_heat = px.imshow(heat, labels=dict(x="Metric", y="Sample", color="Value"))
-st.plotly_chart(fig_heat, use_container_width=True)
-
-# -------- DERIVATIVE SPECTRA --------
-st.header("Derivative Spectra (280 nm)")
-fig_deriv = go.Figure()
-for name,d in data.items():
-    if 280 in d['spectra']:
-        deriv = np.gradient(d['spectra'][280])
-        fig_deriv.add_trace(go.Scatter(x=d['wavelengths'], y=deriv, name=name))
-st.plotly_chart(fig_deriv, use_container_width=True)
-
-# -------- STANDARD SPECTRA --------
-st.header("Spectra Overlay (280)")
+# -------- OVERLAY SPECTRA 280 --------
+st.header("Spectra Overlay (280 nm)")
 fig280 = go.Figure()
 for name,d in data.items():
     if 280 in d['spectra']:
         fig280.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][280], name=name))
 st.plotly_chart(fig280, use_container_width=True)
+
+# -------- OVERLAY SPECTRA 260 --------
+st.header("Spectra Overlay (260 nm)")
+fig260 = go.Figure()
+has260=False
+for name,d in data.items():
+    if 260 in d['spectra']:
+        has260=True
+        fig260.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][260], name=name))
+if has260:
+    st.plotly_chart(fig260, use_container_width=True)
+else:
+    st.info("No 260 nm spectra found")
 
 # EXPORT
 st.header("Export")
@@ -155,4 +159,4 @@ def build_zip():
     return buf
 
 if st.button('Build ZIP'):
-    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v9_3.zip')
+    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v9_5.zip')
