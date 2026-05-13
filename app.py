@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 import io, zipfile, re
 
-st.set_page_config(page_title='SpectraKinetics v10 (Kinetics)', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v10 (Kinetics Fixed)', layout='wide')
 
 # LOGO
 st.markdown("""
@@ -22,7 +22,8 @@ def clean_filename(name):
     match = re.search(r"(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})", name)
     return match.group(1) if match else name[:15]
 
-# PARSER (NOW DETECTS KINETICS)
+# PARSER WITH KINETICS
+
 def parse_file(file_bytes, filename):
     content = file_bytes.decode('utf-8', errors='replace').splitlines()
 
@@ -31,12 +32,10 @@ def parse_file(file_bytes, filename):
     ex_vals = []
     kinetics = None
 
-    # detect kinetics header
     for i, line in enumerate(content):
         if "kinetic time" in line.lower():
             parts = line.split("	")
 
-            # find first blank column (separator)
             blank_idx = None
             for j, p in enumerate(parts):
                 if p.strip() == "":
@@ -45,7 +44,6 @@ def parse_file(file_bytes, filename):
 
             if blank_idx is not None:
                 time_vals = [float(x) for x in parts[blank_idx+1:] if x]
-
                 wl = []
                 matrix = []
 
@@ -63,7 +61,6 @@ def parse_file(file_bytes, filename):
                     "matrix": np.array(matrix)
                 }
 
-    # STANDARD spectra parser (same as before)
     for i, line in enumerate(content):
         parts = line.split("	")
         if 'excitation wavelength' in parts[0].lower():
@@ -103,13 +100,13 @@ with st.sidebar:
             parsed = parse_file(f.read(), f.name)
             st.session_state.datasets[parsed['filename']] = parsed
 
-st.title("SpectraKinetics v10 — Kinetics Enabled")
+st.title("SpectraKinetics v10 — Kinetics Enabled (Stable)")
 
 data = st.session_state.datasets
 if not data:
     st.stop()
 
-# ANALYSIS (same as before)
+# ANALYSIS
 rows=[]
 
 for i,(name,d) in enumerate(data.items()):
@@ -158,9 +155,9 @@ fig = go.Figure()
 for name,d in data.items():
     if ex_toggle in d['spectra']:
         fig.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][ex_toggle], name=name))
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True, key=f"spectra_{ex_toggle}")
 
-# ---------------- KINETICS VIEW ----------------
+# KINETICS
 st.header("Kinetics Viewer")
 
 for name, d in data.items():
@@ -173,7 +170,6 @@ for name, d in data.items():
         wl = kin['wavelengths']
         matrix = kin['matrix']
 
-        # pick representative wavelength (350 nm)
         idx = np.argmin(np.abs(wl-350))
         signal = matrix[idx, :]
 
@@ -185,7 +181,7 @@ for name, d in data.items():
             yaxis_title="Intensity"
         )
 
-        st.plotly_chart(fig_k, use_container_width=True)
+        st.plotly_chart(fig_k, use_container_width=True, key=f"kinetics_{name}")
 
 # EXPORT
 st.header("Export")
@@ -198,4 +194,4 @@ def build_zip():
     return buf
 
 if st.button('Build ZIP'):
-    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v10.zip')
+    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v10_fixed.zip')
