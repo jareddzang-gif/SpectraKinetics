@@ -1,3 +1,4 @@
+from plotly.subplots import make_subplots
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -5,7 +6,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import io, zipfile
 
-st.set_page_config(page_title='SpectraKinetics v8.1', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v9', layout='wide')
 
 if 'datasets' not in st.session_state:
     st.session_state.datasets = {}
@@ -61,7 +62,7 @@ with st.sidebar:
 
     ex_choice = st.selectbox('Excitation', [280, 260])
 
-st.title("SpectraKinetics v8.1 — Advanced Analysis")
+st.title("SpectraKinetics v9 — Advanced Analysis")
 
 data = st.session_state.datasets
 if not data:
@@ -79,11 +80,6 @@ st.plotly_chart(fig, use_container_width=True)
 st.header("Batch Analysis")
 rows=[]
 
-indices=[]
-irif_vals=[]
-pie_vals=[]
-shift_vals=[]
-
 for i,(name,d) in enumerate(data.items()):
     if 280 not in d['spectra']: continue
 
@@ -95,79 +91,78 @@ for i,(name,d) in enumerate(data.items()):
     irif = y[i280]/y[i340] if y[i340]!=0 else np.nan
     pie = y[i350]/y[i330] if y[i330]!=0 else np.nan
 
-    # Peak tracking
-    peak_idx = np.argmax(y)
-    peak_wl = wl[peak_idx]
-
-    # AUC
-    mask_ray = (wl>=260)&(wl<=300)
-    mask_flu = (wl>=300)&(wl<=400)
-    auc_ray = safe_trapz(y[mask_ray], wl[mask_ray])
-    auc_flu = safe_trapz(y[mask_flu], wl[mask_flu])
-    shift_ratio = auc_ray/auc_flu if auc_flu!=0 else np.nan
-
-    # Classification
-    if peak_wl < 330:
-        state = "Blue Shift (Aggregated)"
-    elif peak_wl > 350:
-        state = "Red Shift (Unfolded)"
-    else:
-        state = "Native"
+    peak_wl = wl[np.argmax(y)]
 
     rows.append({
         "File":name,
         "Index":i,
         "IR/IF":irif,
         "I350/I330":pie,
-        "Shift Ratio":shift_ratio,
-        "Peak λmax":peak_wl,
-        "State":state
+        "Peak λmax":peak_wl
     })
-
-    indices.append(i)
-    irif_vals.append(irif)
-    pie_vals.append(pie)
-    shift_vals.append(shift_ratio)
 
 
 df = pd.DataFrame(rows)
 st.dataframe(df, use_container_width=True)
 
-# REGRESSION FUNCTION
+# MULTI-PANEL FIGURE
+st.header("Multi-panel Figures")
 
-def regression_plot(x, y, title, label):
-    if len(y) > 1:
-        x_arr = np.array(x)
-        y_arr = np.array(y)
+fig_multi = make_subplots(rows=2, cols=2,
+    subplot_titles=("IR/IF Trend","I350/I330 Trend","λmax Trend","Spectra (280 nm)"))
 
-        coeffs = np.polyfit(x_arr, y_arr, 1)
-        reg_line = coeffs[0]*x_arr + coeffs[1]
+# IR/IF
+fig_multi.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], mode='lines+markers'), row=1, col=1)
 
-        ss_res = np.sum((y_arr - reg_line)**2)
-        ss_tot = np.sum((y_arr - np.mean(y_arr))**2)
-        r2 = 1 - (ss_res/ss_tot if ss_tot!=0 else 0)
+# I350/I330
+fig_multi.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], mode='lines+markers'), row=1, col=2)
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=x_arr, y=y_arr, mode='markers', name=label))
-        fig.add_trace(go.Scatter(x=x_arr, y=reg_line, mode='lines', name=f'Fit (R²={r2:.3f})'))
-        fig.update_layout(title=title)
-        st.plotly_chart(fig, use_container_width=True)
+# lambda max
+fig_multi.add_trace(go.Scatter(x=df['Index'], y=df['Peak λmax'], mode='lines+markers'), row=2, col=1)
 
-# PLOTS
-regression_plot(indices, irif_vals, "IR/IF Regression", "IR/IF")
-regression_plot(indices, pie_vals, "I350/I330 Regression", "I350/I330")
-regression_plot(indices, shift_vals, "Shift Ratio Regression", "Shift Ratio")
+# spectra overlay
+for name,d in data.items():
+    if 280 in d['spectra']:
+        fig_multi.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][280], name=name), row=2, col=2)
+
+st.plotly_chart(fig_multi, use_container_width=True)
+
+# CORRELATION
+st.header("λmax vs IR/IF Correlation")
+fig_corr = px.scatter(df, x="Peak λmax", y="IR/IF", trendline="ols")
+st.plotly_chart(fig_corr, use_container_width=True)
+
+# PCA
+st.header("PCA Clustering")
+
+matrix = []
+labels = []
+for name,d in data.items():
+    if 280 in d['spectra']:
+        matrix.append(d['spectra'][280])
+        labels.append(name)
+
+matrix = np.array(matrix)
+
+# PCA via SVD
+matrix_centered = matrix - matrix.mean(axis=0)
+U,S,Vt = np.linalg.svd(matrix_centered, full_matrices=False)
+coords = U[:, :2] @ np.diag(S[:2])
+
+pca_df = pd.DataFrame(coords, columns=['PC1','PC2'])
+pca_df['File'] = labels
+
+fig_pca = px.scatter(pca_df, x='PC1', y='PC2', text='File')
+st.plotly_chart(fig_pca, use_container_width=True)
 
 # EXPORT
-st.header("Export Full Report")
+st.header("Export Report")
 
 def build_zip():
     buf = io.BytesIO()
     with zipfile.ZipFile(buf,'w') as z:
         z.writestr("analysis.csv", df.to_csv(index=False))
-
-        summary = df.describe(include='all').to_string()
-        z.writestr("summary.txt", summary)
+        z.writestr("pca.csv", pca_df.to_csv(index=False))
 
         for name,d in data.items():
             spec = pd.DataFrame({'Wavelength':d['wavelengths']})
@@ -178,5 +173,6 @@ def build_zip():
     buf.seek(0)
     return buf
 
-if st.button("Build Full Report ZIP"):
-    st.download_button("Download Report", build_zip(), "spectrakinetics_v8_1_report.zip")
+if st.button("Build ZIP"):
+    st.download_button("Download", build_zip(), "spectrakinetics_v9.zip")
+
