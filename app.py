@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 import io, zipfile, re
 
-st.set_page_config(page_title='SpectraKinetics v11.3.1', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v11.4', layout='wide')
 
 # NAV
 page = st.sidebar.radio("Navigation", ["Spectra Analysis", "Kinetics"])
@@ -20,13 +20,11 @@ if 'datasets' not in st.session_state:
     st.session_state.datasets = {}
 
 # CLEAN NAME
-
 def clean_filename(name):
     match = re.search(r"(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})", name)
     return match.group(1) if match else name[:15]
 
 # PARSER
-
 def parse_file(file_bytes, filename):
     content = file_bytes.decode('utf-8', errors='replace').splitlines()
 
@@ -101,7 +99,7 @@ data = st.session_state.datasets
 if not data:
     st.stop()
 
-# ===================== SPECTRA PAGE (UNCHANGED) =====================
+# ===================== SPECTRA PAGE (RESTORED ONLY REQUESTED ITEMS) =====================
 if page == "Spectra Analysis":
 
     st.title("Spectra Analysis")
@@ -114,10 +112,12 @@ if page == "Spectra Analysis":
         wl = d['wavelengths']
         y = d['spectra'][280]
 
+        # IR
         ir_idx = np.argmax(y)
         ir_peak = wl[ir_idx]
         ir_int = y[ir_idx]
 
+        # IF
         mask = (wl>=300)&(wl<=390)
         if np.any(mask):
             y_if = y[mask]
@@ -133,16 +133,27 @@ if page == "Spectra Analysis":
         irif = y[nearest(280)]/y[nearest(340)] if y[nearest(340)]!=0 else np.nan
         pie = y[nearest(350)]/y[nearest(330)] if y[nearest(330)]!=0 else np.nan
 
+        # placeholders
+        agg = np.nan
+        conc = np.nan
+
         rows.append({
             "File":name,
             "Index":i,
             "IR/IF":irif,
-            "I350/I330":pie
+            "I350/I330":pie,
+            "Aggregation Index":agg,
+            "Concentration (mg/mL)":conc,
+            "IR (nm)":ir_peak,
+            "IR Peak Intensity":ir_int,
+            "IF (nm)":if_peak,
+            "IF Peak Intensity":if_int
         })
 
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True)
 
+    # Spectra unchanged
     st.header(f"Spectra Overlay (Ex {ex_toggle})")
     fig = go.Figure()
     for name,d in data.items():
@@ -151,7 +162,29 @@ if page == "Spectra Analysis":
 
     st.plotly_chart(fig, use_container_width=True, key=f"spectra_{ex_toggle}")
 
-# ===================== KINETICS PAGE FIXED =====================
+    # APIES plot (restored)
+    st.header("APIES (All Metrics Overlay)")
+
+    fig2 = go.Figure()
+
+    fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF', mode='lines+markers'))
+    fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330', mode='lines+markers'))
+
+    if df['Aggregation Index'].notna().any():
+        fig2.add_trace(go.Scatter(x=df['Index'], y=df['Aggregation Index'], name='AggIndex', mode='lines+markers', yaxis='y2'))
+
+    if df['Concentration (mg/mL)'].notna().any():
+        fig2.add_trace(go.Scatter(x=df['Index'], y=df['Concentration (mg/mL)'], name='Concentration', mode='lines+markers', yaxis='y2'))
+
+    fig2.update_layout(
+        yaxis=dict(title="Fluorescence Ratios"),
+        yaxis2=dict(title="Absorbance Metrics", overlaying='y', side='right'),
+        title="APIES"
+    )
+
+    st.plotly_chart(fig2, use_container_width=True, key="apies_plot")
+
+# ===================== KINETICS PAGE (UNCHANGED FROM FIXED) =====================
 if page == "Kinetics":
 
     st.title("Kinetics Analysis (Merged Timeline)")
@@ -167,8 +200,7 @@ if page == "Kinetics":
 
         kin = d['kinetics']
         times = kin['times']
-        
-        # ✅ CRITICAL FIX
+
         if len(times) == 0:
             continue
 
@@ -189,7 +221,6 @@ if page == "Kinetics":
         segments_280.append((shifted_time, signal_280))
         segments_350.append((shifted_time, signal_350))
 
-        # ✅ SAFER OFFSET UPDATE
         time_offset += (times[-1] - times[0])
 
     if len(segments_280) > 0:
@@ -215,4 +246,4 @@ if st.sidebar.button("Download Analysis CSV"):
     with zipfile.ZipFile(buf,'w') as z:
         z.writestr('analysis.csv', df.to_csv(index=False) if 'df' in locals() else "")
     buf.seek(0)
-    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_3_1.zip")
+    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_4.zip")
