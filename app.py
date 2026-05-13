@@ -210,27 +210,54 @@ def parse_spectro_file(file_bytes, filename):
             abs_col_idx = j
             break
 
-    # ── Row 12 (index 11) → time values starting at col C (index 2) ─────────
-    time_row = lines[11].split("\t")
-    times = []
-    for val in time_row[2:]:
-        val = val.strip()
-        if val == "":
-            break
-        try:
-            times.append(float(val))
-        except ValueError:
+    # ── Detect time or excitation axis ───────────────────────────────────────
+times = []
+data_start_row = 12  # default (row 13)
+axis_type = "time"
+
+# --- Try standard time row (row 12) ---
+time_row = lines[11].split("	")
+
+for val in time_row[2:]:
+    val = val.strip()
+    if val == "":
+        break
+    try:
+        times.append(float(val))
+    except ValueError:
+        break
+
+# --- Fallback: detect "Excitation Wavelength" row ---
+if not times:
+    for i, line in enumerate(lines):
+        parts = line.split("	")
+        if len(parts) > 0 and "excitation wavelength" in parts[0].strip().lower():
+
+            axis_type = "excitation"
+
+            times = []
+            for val in parts[2:]:
+                val = val.strip()
+                if val == "":
+                    break
+                try:
+                    times.append(float(val))
+                except ValueError:
+                    times.append(float('nan'))
+
+            data_start_row = i + 2
             break
 
-    if not times:
-        return None, "Could not parse time values from row 12"
+# --- Final validation ---
+if not times or len(times) == 0:
+    return None, "Could not detect time or excitation axis"
 
     # ── Rows 13+ → wavelength, intensities, and absorbance ───────────────────
     wavelengths = []
     intensity_matrix = []
     absorbance_values = []
 
-    for line in lines[12:]:
+    for line in lines[data_start_row:]:
         parts = line.split("\t")
         if len(parts) < 3:
             continue
@@ -287,6 +314,7 @@ def parse_spectro_file(file_bytes, filename):
         "absorbance": absorbance_series,
         "has_absorbance": has_absorbance,
         "filename": filename,
+        "axis_type": axis_type,
     }, None
 
 
@@ -403,6 +431,8 @@ ds = st.session_state.datasets[st.session_state.active_file]
 times = ds["times"]
 wavelengths = ds["wavelengths"]
 intensity = ds["intensity"]
+axis_type = ds.get("axis_type", "time")
+x_label = "Time (s)" if axis_type == "time" else "Excitation Wavelength (nm)"
 
 # Stats row
 wl_actual, _ = nearest(wavelengths, wl_interest)
@@ -498,7 +528,7 @@ with tab_kinetics:
                 text=f"Kinetics at λ = {wl_actual:.2f} nm (Ex 280 nm)",
                 font=dict(family="Inter", size=14, color="#0e6b8c"),
             ),
-            xaxis=dict(title="Time (s)", gridcolor="#eef1f5", linecolor="#d0d7e2", tickfont=dict(color="#5a6a7e")),
+            xaxis=dict(title=x_label, gridcolor="#eef1f5", linecolor="#d0d7e2", tickfont=dict(color="#5a6a7e")),
             yaxis=dict(title="Intensity (a.u.)", gridcolor="#eef1f5", linecolor="#d0d7e2", tickfont=dict(color="#5a6a7e")),
             legend=dict(bgcolor="rgba(255,255,255,0.9)", bordercolor="#d0d7e2", borderwidth=1),
             margin=dict(t=50, b=40, l=50, r=20),
@@ -666,7 +696,7 @@ with tab_analysis:
             plot_bgcolor="#ffffff",
             title=dict(text=f"IR/IF Ratio over Time  (IR={ir_actual:.1f} nm / IF={if_actual:.1f} nm)",
                        font=dict(family="Inter", size=13, color="#0e6b8c")),
-            xaxis=dict(title="Time (s)", gridcolor="#eef1f5", linecolor="#d0d7e2"),
+            xaxis=dict(title=x_label, gridcolor="#eef1f5", linecolor="#d0d7e2"),
             yaxis=dict(title="IR/IF Ratio", gridcolor="#eef1f5", linecolor="#d0d7e2"),
             margin=dict(t=45, b=40, l=50, r=20),
             hovermode="x unified",
@@ -737,7 +767,7 @@ with tab_analysis:
             plot_bgcolor="#ffffff",
             title=dict(text=f"I{wl_350_actual:.0f}/I{wl_330_actual:.0f} Ratio over Time",
                        font=dict(family="Inter", size=13, color="#0a9e7a")),
-            xaxis=dict(title="Time (s)", gridcolor="#eef1f5", linecolor="#d0d7e2"),
+            xaxis=dict(title=x_label, gridcolor="#eef1f5", linecolor="#d0d7e2"),
             yaxis=dict(title=f"I{wl_350_actual:.0f}/I{wl_330_actual:.0f} Ratio", gridcolor="#eef1f5", linecolor="#d0d7e2"),
             margin=dict(t=45, b=40, l=50, r=20),
             hovermode="x unified",
@@ -1116,3 +1146,98 @@ with tab_data:
             key="dl_excel_final",
         )
         st.success(f"✅ **{fname}** is ready — click above to download.")
+
+
+import zipfile
+import json
+
+st.divider()
+st.markdown("""
+📦 Export Everything (Full Scientific Bundle)
+""", unsafe_allow_html=True)
+
+def fig_to_png_bytes(fig):
+    try:
+        return fig.to_image(format="png", scale=2)
+    except Exception:
+        return None
+
+
+def build_zip():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+
+        # ── RAW DATA ─────────────────────────────
+        z.writestr("raw_intensity.csv", intensity.to_csv())
+
+        # ── KINETICS ─────────────────────────────
+        wl_act, _ = nearest(wavelengths, wl_interest)
+        kin_df = pd.DataFrame({
+            "X": times,
+            "Intensity": intensity.loc[wl_act].values
+        })
+        z.writestr("kinetics.csv", kin_df.to_csv(index=False))
+
+        # ── SPECTRA ──────────────────────────────
+        t_act, _ = nearest(times, t_spectra)
+        spec_df = pd.DataFrame({
+            "Wavelength": wavelengths,
+            "Intensity": intensity[t_act].values
+        })
+        z.writestr("spectra.csv", spec_df.to_csv(index=False))
+
+        # ── IR/IF ────────────────────────────────
+        t_ir, ir_vals, _ = get_intensity_series(ds, ir_wl)
+        _, if_vals, _ = get_intensity_series(ds, if_wl)
+        ratio_irif = np.where(if_vals != 0, ir_vals / if_vals, np.nan)
+        irif_df = pd.DataFrame({
+            "X": t_ir,
+            "IR": ir_vals,
+            "IF": if_vals,
+            "IR/IF": ratio_irif
+        })
+        z.writestr("ir_if_ratio.csv", irif_df.to_csv(index=False))
+
+        # ── I350/I330 ────────────────────────────
+        t_350, i350, _ = get_intensity_series(ds, wl_350_input)
+        _, i330, _ = get_intensity_series(ds, wl_330_input)
+        ratio_pie = np.where(i330 != 0, i350 / i330, np.nan)
+        pie_df = pd.DataFrame({
+            "X": t_350,
+            "I350": i350,
+            "I330": i330,
+            "Ratio": ratio_pie
+        })
+        z.writestr("i350_i330.csv", pie_df.to_csv(index=False))
+
+        # ── ABSORBANCE ───────────────────────────
+        if ds.get("has_absorbance"):
+            abs_df = pd.DataFrame({
+                "Wavelength": ds["absorbance"].index,
+                "Absorbance": ds["absorbance"].values
+            })
+            z.writestr("absorbance.csv", abs_df.to_csv(index=False))
+
+        # ── SUMMARY JSON ─────────────────────────
+        summary = {
+            "file": ds.get("filename"),
+            "axis_type": axis_type,
+            "wavelength_range": [float(wavelengths.min()), float(wavelengths.max())],
+            "points": len(times)
+        }
+        z.writestr("summary.json", json.dumps(summary, indent=2))
+
+        # ── FIGURES (if possible) ────────────────
+        try:
+            z.writestr("kinetics.png", fig_to_png_bytes(fig))
+            z.writestr("spectra.png", fig_to_png_bytes(fig2))
+        except Exception:
+            pass
+
+    buf.seek(0)
+    return buf
+
+if st.button("📦 Build Full ZIP Export"):
+    zip_bytes = build_zip()
+    st.download_button("⬇ Download Complete Bundle", zip_bytes, "spectrakinetics_export.zip", "application/zip")
+
