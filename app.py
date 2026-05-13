@@ -3,10 +3,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
 import io, zipfile
 
-st.set_page_config(page_title='SpectraKinetics v9', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v9.1', layout='wide')
 
 if 'datasets' not in st.session_state:
     st.session_state.datasets = {}
@@ -55,22 +54,13 @@ with st.sidebar:
 
     ex_choice = st.selectbox('Excitation', [280, 260])
 
-st.title("SpectraKinetics v9 — Clean Build")
+st.title("SpectraKinetics v9.1 — Clean Metrics View")
 
 data = st.session_state.datasets
 if not data:
     st.stop()
 
-# SPECTRA
-st.header("Spectra Overlay")
-fig = go.Figure()
-for name,d in data.items():
-    if ex_choice in d['spectra']:
-        fig.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][ex_choice], name=name))
-st.plotly_chart(fig, use_container_width=True)
-
 # ANALYSIS
-st.header("Batch Analysis")
 rows=[]
 
 for i,(name,d) in enumerate(data.items()):
@@ -86,75 +76,46 @@ for i,(name,d) in enumerate(data.items()):
 
     peak_wl = wl[np.argmax(y)]
 
+    # optional absorbance-based placeholders
+    concentration = np.nan
+    agg_index = np.nan
+
     rows.append({
         "File":name,
         "Index":i,
         "IR/IF":irif,
         "I350/I330":pie,
-        "Peak λmax":peak_wl
+        "λmax":peak_wl,
+        "Concentration":concentration,
+        "Aggregation Index":agg_index
     })
 
 
 df = pd.DataFrame(rows)
 st.dataframe(df, use_container_width=True)
 
-# MULTI PANEL
-st.header("Multi-panel Figure")
+# COMBINED MULTI-METRIC PLOT
+st.header("Combined Metrics Overlay")
 
-fig_multi = make_subplots(rows=2, cols=2,
-    subplot_titles=("IR/IF","I350/I330","λmax","Spectra"))
+fig = go.Figure()
 
-fig_multi.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], mode='lines+markers'),1,1)
-fig_multi.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], mode='lines+markers'),1,2)
-fig_multi.add_trace(go.Scatter(x=df['Index'], y=df['Peak λmax'], mode='lines+markers'),2,1)
+fig.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], mode='lines+markers', name='IR/IF'))
+fig.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], mode='lines+markers', name='I350/I330'))
 
-for name,d in data.items():
-    if 280 in d['spectra']:
-        fig_multi.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][280], name=name, showlegend=False),2,2)
+# only plot optional metrics if data exists
+if df['Concentration'].notna().any():
+    fig.add_trace(go.Scatter(x=df['Index'], y=df['Concentration'], mode='lines+markers', name='Concentration'))
 
-st.plotly_chart(fig_multi, use_container_width=True)
+if df['Aggregation Index'].notna().any():
+    fig.add_trace(go.Scatter(x=df['Index'], y=df['Aggregation Index'], mode='lines+markers', name='Aggregation Index'))
 
-# CORRELATION (manual regression)
-st.header("λmax vs IR/IF Correlation")
+fig.update_layout(
+    title="All Metrics Overlay",
+    xaxis_title="Sample Index",
+    yaxis_title="Value"
+)
 
-x = df['Peak λmax'].values
-y = df['IR/IF'].values
-
-fig_corr = go.Figure()
-fig_corr.add_trace(go.Scatter(x=x,y=y,mode='markers',name='Data'))
-
-if len(x)>1:
-    coeffs = np.polyfit(x,y,1)
-    reg_line = coeffs[0]*x + coeffs[1]
-
-    ss_res = np.sum((y - reg_line)**2)
-    ss_tot = np.sum((y - np.mean(y))**2)
-    r2 = 1 - (ss_res/ss_tot if ss_tot!=0 else 0)
-
-    fig_corr.add_trace(go.Scatter(x=x,y=reg_line,mode='lines',name=f'Fit (R²={r2:.3f})'))
-
-st.plotly_chart(fig_corr, use_container_width=True)
-
-# PCA
-st.header("PCA Clustering")
-
-matrix=[]
-labels=[]
-for name,d in data.items():
-    if 280 in d['spectra']:
-        matrix.append(d['spectra'][280])
-        labels.append(name)
-
-matrix = np.array(matrix)
-matrix_centered = matrix - matrix.mean(axis=0)
-U,S,Vt = np.linalg.svd(matrix_centered, full_matrices=False)
-coords = U[:,:2] @ np.diag(S[:2])
-
-pca_df = pd.DataFrame(coords,columns=['PC1','PC2'])
-pca_df['File']=labels
-
-fig_pca = px.scatter(pca_df,x='PC1',y='PC2',text='File')
-st.plotly_chart(fig_pca, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True)
 
 # EXPORT
 st.header("Export")
@@ -163,9 +124,8 @@ def build_zip():
     buf=io.BytesIO()
     with zipfile.ZipFile(buf,'w') as z:
         z.writestr('analysis.csv', df.to_csv(index=False))
-        z.writestr('pca.csv', pca_df.to_csv(index=False))
     buf.seek(0)
     return buf
 
 if st.button('Build ZIP'):
-    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v9_clean.zip')
+    st.download_button('Download ZIP', build_zip(), 'spectrakinetics_v9_1_clean.zip')
