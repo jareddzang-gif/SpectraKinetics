@@ -289,3 +289,76 @@ if page == "AUC Analysis":
     st.subheader("AUC Result")
     st.metric("Area Under Curve", f"{area:.3f}")
     st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
+
+st.markdown("---")
+
+# ✅ BUTTON TO RUN BATCH AUC
+run_batch = st.button("Calculate AUC for All Datasets")
+
+if run_batch:
+
+    results = []
+
+    for name, dataset in data.items():
+
+        # ✅ skip if spectrum not available
+        if ex_toggle not in dataset['spectra']:
+            continue
+
+        wl_full = dataset['wavelengths']
+        y_full = dataset['spectra'][ex_toggle]
+
+        # ✅ skip bad data
+        if len(wl_full) == 0:
+            continue
+
+        # ✅ apply selected wavelength range
+        mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
+
+        if not np.any(mask_full):
+            continue
+
+        # ✅ calculate AUC
+        auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
+
+        # ✅ extract timestamp from filename
+        try:
+            timestamp = pd.to_datetime(name, format="%Y-%m-%d-%H-%M-%S")
+        except:
+            continue
+
+        results.append({
+            "time": timestamp,
+            "AUC": auc_val,
+            "file": name
+        })
+
+    # ✅ handle empty results
+    if len(results) == 0:
+        st.warning("No valid datasets for AUC calculation.")
+    else:
+        df_auc = pd.DataFrame(results)
+        df_auc = df_auc.sort_values("time")
+
+        # ✅ PLOT
+        fig_auc = go.Figure()
+
+        fig_auc.add_trace(go.Scatter(
+            x=df_auc["time"],
+            y=df_auc["AUC"],
+            mode="lines+markers",
+            name="AUC over Time"
+        ))
+
+        fig_auc.update_layout(
+            title="AUC vs Time",
+            xaxis_title="Time",
+            yaxis_title="AUC",
+            template="plotly_white"
+        )
+
+        st.plotly_chart(fig_auc, use_container_width=True)
+
+        # ✅ TABLE OUTPUT
+        st.subheader("AUC Results Table")
+        st.dataframe(df_auc)
