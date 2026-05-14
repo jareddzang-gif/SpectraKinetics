@@ -254,12 +254,13 @@ for i, (name, d) in enumerate(data.items()):
         )
 
 
-    # ✅ CORRECT INDENTATION HERE
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-        key=f"spectra_overlay_{ex_toggle}_{len(fig.data)}"
-    )
+import uuid  # ✅ add this once at top if not already present
+
+st.plotly_chart(
+    fig,
+    use_container_width=True,
+    key=f"spectra_overlay_{uuid.uuid4()}"
+)
 
 
 
