@@ -196,48 +196,96 @@ if page == "Kinetics":
 # =====================
 # ✅ AUC (FIXED)
 # =====================
-# ---- FILE SELECTION ----
-selected_file = st.selectbox("Dataset", list(data.keys()))
-d = data[selected_file]
+# =====================
+# AUC ANALYSIS
+# =====================
+if page == "AUC Analysis":
 
-# ---- DATA EXTRACTION ----
-wl = d['wavelengths']
-y = d['spectra'][ex_toggle]
+    st.title("AUC Analysis")
 
-# ---- SAFETY CHECK ----
-if len(wl) == 0:
-    st.warning("No wavelength data available")
-    st.stop()
+    # ---- FILE SELECTION ----
+    selected_file = st.selectbox("Dataset", list(data.keys()))
+    d = data[selected_file]
 
-# ---- DEFINE LIMITS ----
-min_wl = float(np.min(wl))
-max_wl = float(np.max(wl))
+    # ✅ Check spectra exists
+    if ex_toggle not in d['spectra']:
+        st.warning("Selected excitation wavelength not available in this dataset.")
+        st.stop()
 
-# ---- INPUT UI ----
-st.subheader("Select Wavelength Range")
+    # ---- DATA EXTRACTION ----
+    wl = d['wavelengths']
+    y = d['spectra'][ex_toggle]
 
-col1, col2 = st.columns(2)
+    # ✅ Ensure valid data
+    if len(wl) == 0 or len(y) == 0:
+        st.warning("No spectral data available.")
+        st.stop()
 
-with col1:
-    start_wl = st.number_input(
-        "Start Wavelength (nm)",
-        min_value=min_wl,
-        max_value=max_wl,
-        value=float(min_wl + 20)
+    # ---- LIMITS ----
+    min_wl = float(np.min(wl))
+    max_wl = float(np.max(wl))
+
+    # ---- INPUT UI ----
+    st.subheader("Select Wavelength Range")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        start_wl = st.number_input(
+            "Start Wavelength (nm)",
+            min_value=min_wl,
+            max_value=max_wl,
+            value=float(min_wl + 20)
+        )
+
+    with col2:
+        end_wl = st.number_input(
+            "End Wavelength (nm)",
+            min_value=min_wl,
+            max_value=max_wl,
+            value=float(max_wl - 20)
+        )
+
+    # ✅ safer handling (NO stop, just fix automatically)
+    start_wl, end_wl = sorted([start_wl, end_wl])
+
+    # ---- AUC ----
+    mask = (wl >= start_wl) & (wl <= end_wl)
+
+    if not np.any(mask):
+        st.warning("Selected range contains no data.")
+        st.stop()
+
+    area = np.trapezoid(y[mask], wl[mask])
+
+    # ---- PLOT ----
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=wl,
+        y=y,
+        name='Full Spectrum',
+        line=dict(color='black')
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=wl[mask],
+        y=y[mask],
+        name='Selected Region',
+        fill='tozeroy',
+        line=dict(color='orange')
+    ))
+
+    fig.update_layout(
+        title="AUC Selection",
+        xaxis_title="Wavelength (nm)",
+        yaxis_title="Intensity",
+        template='plotly_white'
     )
 
-with col2:
-    end_wl = st.number_input(
-        "End Wavelength (nm)",
-        min_value=min_wl,
-        max_value=max_wl,
-        value=float(max_wl - 20)
-    )
+    st.plotly_chart(fig, use_container_width=True)
 
-if start_wl >= end_wl:
-    st.warning("Start wavelength must be less than end wavelength")
-    st.stop()
-
-# ---- AUC ----
-mask = (wl >= start_wl) & (wl <= end_wl)
-area = np.trapezoid(y[mask], wl[mask]) if np.any(mask) else 0
+    # ---- OUTPUT ----
+    st.subheader("AUC Result")
+    st.metric("Area Under Curve", f"{area:.3f}")
+    st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
