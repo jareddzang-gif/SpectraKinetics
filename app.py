@@ -255,6 +255,14 @@ if page == "Spectra Analysis":
    # =====================
 # ✅ APIES WITH REGRESSION
 # =====================
+
+df = pd.DataFrame(rows)
+
+fig2 = go.Figure()
+
+x_vals = df['Index'].values
+
+
 st.header("APIES (All Metrics Overlay)")
 
 fig2 = go.Figure()
