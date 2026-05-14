@@ -464,7 +464,7 @@ if page == "AUC Analysis":
     # =====================
     # ✅ VISUALIZATION
     # =====================
-   fig = go.Figure()
+fig = go.Figure()
 
 # ✅ Always plot spectrum
 fig.add_trace(go.Scatter(
