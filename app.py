@@ -1,4 +1,4 @@
-# v15 FINAL – APIES MULTI-AXIS + OVERLAY + CLEAN AUC
+# v16 FINAL CLEAN BUILD
 
 import streamlit as st
 import pandas as pd
@@ -6,22 +6,31 @@ import numpy as np
 import plotly.graph_objects as go
 import re
 
-st.set_page_config(page_title='SpectraKinetics v15', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v16', layout='wide')
 
 page = st.sidebar.radio("Navigation",
-                        ["APIES Dashboard", "Kinetics", "AUC Analysis"])
+                        ["APIES Dashboard", "AUC Analysis"])
 
 ex_toggle = st.sidebar.radio("Spectra View", [280, 260])
 
 # =====================
+# ✅ TIMESTAMP PARSER (FIXED)
+# =====================
+def extract_time(name):
+    match = re.search(r"(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})_(\d{2})", name)
+    if match:
+        return pd.to_datetime(
+            f"{match.group(1)}-{match.group(2)}-{match.group(3)} "
+            f"{match.group(4)}:{match.group(5)}:{match.group(6)}"
+        )
+    return pd.NaT
+
+# =====================
 # PARSER
 # =====================
-def clean_filename(name):
-    match = re.search(r"(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})", name)
-    return match.group(1) if match else name
-
 def parse_file(file_bytes, filename):
     content = file_bytes.decode("utf-8", errors="replace").splitlines()
+
     spectra, wavelengths, ex_vals = {}, [], []
 
     for i, line in enumerate(content):
@@ -32,6 +41,7 @@ def parse_file(file_bytes, filename):
             break
 
     matrix = []
+
     for line in content[start:]:
         parts = line.split("\t")
         try:
@@ -45,9 +55,11 @@ def parse_file(file_bytes, filename):
     for j, ex in enumerate(ex_vals):
         spectra[ex] = matrix[:, j]
 
-    return {"wavelengths": np.array(wavelengths),
-            "spectra": spectra,
-            "filename": clean_filename(filename)}
+    return {
+        "wavelengths": np.array(wavelengths),
+        "spectra": spectra,
+        "filename": filename
+    }
 
 # =====================
 # LOAD FILES
@@ -61,7 +73,9 @@ if files:
         st.session_state.datasets[f"{parsed['filename']}_{i}"] = parsed
 
 data = st.session_state.get("datasets", {})
+
 if not data:
+    st.info("Upload files to begin.")
     st.stop()
 
 # =====================
@@ -102,28 +116,14 @@ if page == "APIES Dashboard":
         auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir])
         auc_if = np.trapezoid(y[mask_if], wl[mask_if])
 
-        irif_auc = auc_ir / auc_if if auc_if != 0 else np.nan
+        irif = auc_ir / auc_if if auc_if != 0 else np.nan
         i350_i330 = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
-
-        # ✅ FIXED timestamp parsing for your filename format
-match = re.search(
-    r"(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})_(\d{2})",
-    name
-)
-
-if match:
-    t = pd.to_datetime(
-        f"{match.group(1)}-{match.group(2)}-{match.group(3)} "
-        f"{match.group(4)}:{match.group(5)}:{match.group(6)}"
-    )
-else:
-    t = pd.NaT
 
         rows.append({
             "File": name,
-            "Time": t,
+            "Time": extract_time(name),
             "Index": i,
-            "IR/IF (AUC)": irif_auc,
+            "IR/IF (AUC)": irif,
             "I350/I330": i350_i330,
             "AUC IR": auc_ir,
             "AUC IF": auc_if,
@@ -131,14 +131,14 @@ else:
             "Concentration": np.nan
         })
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(rows).sort_values("Time")
+
+    # ✅ TABLE
+    st.subheader("Dataset Table")
     st.dataframe(df, use_container_width=True)
 
-    # =====================
-    # ✅ FULL SPECTRA OVERLAY (RESTORED)
-    # =====================
+    # ✅ SPECTRA OVERLAY
     st.subheader("Spectra Overlay")
-
     fig_spec = go.Figure()
 
     for name, d in data.items():
@@ -149,25 +149,15 @@ else:
                 name=name
             ))
 
-    fig_spec.update_layout(
-        xaxis_title="Wavelength",
-        yaxis_title="Intensity"
-    )
-
     st.plotly_chart(fig_spec, use_container_width=True)
-
-    # =====================
-    # ✅ MULTI-AXIS APIES DASHBOARD
-    # =====================
-    st.subheader("APIES Multi-Metric Dashboard")
-
-    df = df.sort_values("Time")
 
     x_vals = df["Time"].fillna(df["Index"])
 
+    # ✅ MAIN DASHBOARD
+    st.subheader("APIES Metrics")
+
     fig = go.Figure()
 
-    # ✅ LEFT AXIS (PRIMARY)
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=df["IR/IF (AUC)"],
@@ -176,35 +166,52 @@ else:
         yaxis="y1"
     ))
 
-    # ✅ RIGHT AXIS (SECONDARY)
-    metrics_right = [
-        ("I350/I330", df["I350/I330"]),
-        ("AUC IR", df["AUC IR"]),
-        ("AUC IF", df["AUC IF"])
-    ]
-
-    for name, series in metrics_right:
-        fig.add_trace(go.Scatter(
-            x=x_vals,
-            y=series,
-            name=name,
-            mode="lines+markers",
-            yaxis="y2"
-        ))
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=df["I350/I330"],
+        name="I350/I330",
+        mode="lines+markers",
+        yaxis="y2"
+    ))
 
     fig.update_layout(
-        xaxis=dict(title="Time / Sample"),
-        yaxis=dict(title="IR/IF (AUC)", side="left"),
-        yaxis2=dict(title="Other Metrics",
-                    overlaying='y',
-                    side='right'),
+        xaxis_title="Time / Sample",
+        yaxis=dict(title="IR/IF", side="left"),
+        yaxis2=dict(title="I350/I330", overlaying='y', side='right'),
         template="plotly_white"
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
+    # ✅ AUC COMPONENTS PANEL
+    st.subheader("AUC Components")
+
+    fig_auc = go.Figure()
+
+    fig_auc.add_trace(go.Scatter(
+        x=x_vals,
+        y=df["AUC IR"],
+        name="AUC IR",
+        mode="lines+markers"
+    ))
+
+    fig_auc.add_trace(go.Scatter(
+        x=x_vals,
+        y=df["AUC IF"],
+        name="AUC IF",
+        mode="lines+markers"
+    ))
+
+    fig_auc.update_layout(
+        xaxis_title="Time / Sample",
+        yaxis_title="AUC",
+        template="plotly_white"
+    )
+
+    st.plotly_chart(fig_auc, use_container_width=True)
+
 # =====================
-# ✅ AUC ANALYSIS (FINAL CLEAN)
+# ✅ AUC ANALYSIS
 # =====================
 if page == "AUC Analysis":
 
@@ -241,7 +248,7 @@ if page == "AUC Analysis":
     st.plotly_chart(fig)
     st.metric("AUC", f"{area:.3f}")
 
-    # ✅ BATCH FIXED
+    # ✅ CLEAN BATCH TIME SERIES
     if st.button("Calculate AUC for All Datasets"):
 
         results = []
@@ -259,7 +266,7 @@ if page == "AUC Analysis":
 
             auc_val = np.trapezoid(y_f[mask], wl_f[mask])
 
-            t = pd.to_datetime(name.split("_")[0], errors='coerce')
+            t = extract_time(name)
             if pd.isna(t):
                 continue
 
@@ -285,6 +292,7 @@ if page == "AUC Analysis":
         r2 = 1 - ss_res/ss_tot if ss_tot != 0 else np.nan
 
         fig_auc = go.Figure()
+
         fig_auc.add_trace(go.Scatter(
             x=df_auc["time"],
             y=y_vals,
