@@ -1,139 +1,7 @@
 # v10, 14 May 2026
-# =====================
-# SPECTRA 
-# =====================
 
 # =====================
-# IMPORTS
-# =====================
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-import io, zipfile, re
-
-# =====================
-# CONFIG
-# =====================
-st.set_page_config(page_title='SpectraKinetics v11.7', layout='wide')
-
-# =====================
-# PAGE SELECTOR
-# =====================
-page = st.sidebar.radio(
-    "Navigation",
-    ["Spectra Analysis", "Kinetics", "AUC Analysis"]
-)
-
-# =====================
-# CLEAN NAME FUNCTION
-# =====================
-def clean_filename(name):
-    match = re.search(r"(\\d{4}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2})", name)
-    return match.group(1) if match else name[:15]
-
-# =====================
-# PARSER FUNCTION
-# =====================
-def parse_file(file_bytes, filename):
-    content = file_bytes.decode('utf-8', errors='replace').splitlines()
-
-    spectra = {}
-    wavelengths = []
-    ex_vals = []
-    kinetics = None
-
-    # --- Kinetics ---
-    for i, line in enumerate(content):
-        if "kinetic time" in line.lower():
-            parts = line.split("\t")
-            blank_idx = next((j for j, p in enumerate(parts) if p.strip() == ""), None)
-
-            if blank_idx is not None:
-                times = [float(x) for x in parts[blank_idx+1:] if x]
-                wl, mat = [], []
-
-                for row in content[i+1:]:
-                    r = row.split("\t")
-                    try:
-                        wl.append(float(r[1]))
-                        mat.append([float(x) for x in r[blank_idx+1:blank_idx+1+len(times)]])
-                    except:
-                        continue
-
-                kinetics = {
-                    "times": np.array(times),
-                    "wavelengths": np.array(wl),
-                    "matrix": np.array(mat)
-                }
-
-    # --- Spectra ---
-    for i, line in enumerate(content):
-        parts = line.split("\t")
-
-        if 'excitation wavelength' in parts[0].lower():
-            ex_vals = [float(v) for v in parts[2:] if v]
-
-        if parts[0].isdigit():
-            data_start = i
-            break
-
-    matrix = []
-
-    for line in content[data_start:]:
-        parts = line.split("\t")
-        try:
-            wavelengths.append(float(parts[1]))
-            matrix.append([float(x) for x in parts[2:2+len(ex_vals)]])
-        except:
-            continue
-
-    matrix = np.array(matrix) if len(matrix) > 0 else np.array([])
-
-    for j, ex in enumerate(ex_vals if len(matrix) > 0 else []):
-        spectra[ex] = matrix[:, j]
-
-    return {
-        'wavelengths': np.array(wavelengths),
-        'spectra': spectra,
-        'filename': clean_filename(filename),
-        'kinetics': kinetics
-    }
-
-# =====================
-# FILE UPLOAD
-# =====================
-files = st.sidebar.file_uploader(
-    "Upload ≤200 files",
-    type=['txt'],
-    accept_multiple_files=True
-)
-
-ex_toggle = st.sidebar.radio("Spectra View", [280, 260])
-
-if files:
-
-    st.session_state.datasets = {}
-
-    for i, f in enumerate(files[:200]):
-
-        parsed = parse_file(f.read(), f.name)
-
-        # ✅ Force unique names (CRITICAL FIX)
-        unique_name = f"{parsed['filename']}_{i}"
-
-        st.session_state.datasets[unique_name] = parsed
-
-# =====================
-# LOAD DATA
-# =====================
-data = st.session_state.get('datasets', {})
-
-if not data:
-    st.stop()
-
-# =====================
-# SPECTRA ANALYSIS (FULL FIXED SECTION)
+# SPECTRA ANALYSIS (FINAL CLEAN VERSION)
 # =====================
 if page == "Spectra Analysis":
 
@@ -145,104 +13,99 @@ if page == "Spectra Analysis":
 
     with col1:
         st.markdown("**IR Range (nm)**")
-        ir_start = st.number_input("IR Start", value=270.0)
-        ir_end = st.number_input("IR End", value=300.0)
+        ir_start = st.number_input("IR Start", value=270.0, key="ir_start")
+        ir_end = st.number_input("IR End", value=300.0, key="ir_end")
 
     with col2:
         st.markdown("**IF Range (nm)**")
-        if_start = st.number_input("IF Start", value=320.0)
-        if_end = st.number_input("IF End", value=390.0)
+        if_start = st.number_input("IF Start", value=320.0, key="if_start")
+        if_end = st.number_input("IF End", value=390.0, key="if_end")
 
     ir_start, ir_end = sorted([ir_start, ir_end])
     if_start, if_end = sorted([if_start, if_end])
 
     # =====================
-    # TABLE
+    # TABLE (WITH AUC)
     # =====================
     rows = []
 
-for i, (name, d) in enumerate(data.items()):
+    for i, (name, d) in enumerate(data.items()):
 
-    if 280 not in d['spectra']:
-        continue
+        if 280 not in d['spectra']:
+            continue
 
-    wl = d['wavelengths']
-    y = d['spectra'][280]
+        wl = d['wavelengths']
+        y = d['spectra'][280]
 
-    # ---- IR peak ----
-    ir_idx = np.argmax(y)
-    ir_peak = wl[ir_idx]
-    ir_int = y[ir_idx]
+        # ---- IR peak ----
+        ir_idx = np.argmax(y)
+        ir_peak = wl[ir_idx]
+        ir_int = y[ir_idx]
 
-    # ---- IF peak ----
-    mask = (wl >= 300) & (wl <= 390)
+        # ---- IF peak ----
+        mask_peak = (wl >= 300) & (wl <= 390)
 
-    if np.any(mask):
-        y_if = y[mask]
-        wl_if = wl[mask]
-        idx = np.argmax(y_if)
-        if_peak = wl_if[idx]
-        if_int = y_if[idx]
-    else:
-        if_peak = np.nan
-        if_int = np.nan
+        if np.any(mask_peak):
+            y_if = y[mask_peak]
+            wl_if = wl[mask_peak]
+            idx = np.argmax(y_if)
+            if_peak = wl_if[idx]
+            if_int = y_if[idx]
+        else:
+            if_peak = np.nan
+            if_int = np.nan
 
-    # =====================
-    # ✅ AUC CALCULATIONS (CORRECTLY INDENTED)
-    # =====================
+        # =====================
+        # ✅ AUC CALCULATIONS
+        # =====================
+        mask_ir = (wl >= ir_start) & (wl <= ir_end)
+        auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir]) if np.any(mask_ir) else np.nan
 
-    # IR AUC
-    mask_ir = (wl >= ir_start) & (wl <= ir_end)
-    auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir]) if np.any(mask_ir) else np.nan
+        mask_if_auc = (wl >= if_start) & (wl <= if_end)
+        auc_if = np.trapezoid(y[mask_if_auc], wl[mask_if_auc]) if np.any(mask_if_auc) else np.nan
 
-    # IF AUC
-    mask_if_auc = (wl >= if_start) & (wl <= if_end)
-    auc_if = np.trapezoid(y[mask_if_auc], wl[mask_if_auc]) if np.any(mask_if_auc) else np.nan
+        irif = auc_ir / auc_if if (not np.isnan(auc_if) and auc_if != 0) else np.nan
 
-    # AUC ratio
-    irif = auc_ir / auc_if if (not np.isnan(auc_if) and auc_if != 0) else np.nan
+        # ---- original ratio preserved ----
+        nearest = lambda v: np.argmin(np.abs(wl - v))
+        pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
 
-    # ---- old point ratio (still kept)
-    nearest = lambda v: np.argmin(np.abs(wl - v))
-    pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
-
-    rows.append({
-        "File": name,
-        "Index": i,
-        "IR/IF": irif,
-        "IR/IF (AUC)": irif,
-        "AUC IR": auc_ir,
-        "AUC IF": auc_if,
-        "I350/I330": pie,
-        "Aggregation Index": np.nan,
-        "Concentration (mg/mL)": np.nan,
-        "IR (nm)": ir_peak,
-        "IR Peak Intensity": ir_int,
-        "IF (nm)": if_peak,
-        "IF Peak Intensity": if_int
-    })
-
+        rows.append({
+            "File": name,
+            "Index": i,
+            "IR/IF": irif,
+            "IR/IF (AUC)": irif,
+            "AUC IR": auc_ir,
+            "AUC IF": auc_if,
+            "I350/I330": pie,
+            "Aggregation Index": np.nan,
+            "Concentration (mg/mL)": np.nan,
+            "IR (nm)": ir_peak,
+            "IR Peak Intensity": ir_int,
+            "IF (nm)": if_peak,
+            "IF Peak Intensity": if_int
+        })
 
     df = pd.DataFrame(rows)
 
     st.dataframe(df, use_container_width=True)
 
     # =====================
-    # ✅ FULL SPECTRA OVERLAY (RESTORED CORRECTLY)
+    # ✅ FULL SPECTRA OVERLAY
     # =====================
     st.header(f"Spectra Overlay (Ex {ex_toggle})")
 
     fig = go.Figure()
 
     for name, d in data.items():
-
         if ex_toggle in d['spectra']:
-
             fig.add_trace(go.Scatter(
                 x=d['wavelengths'],
                 y=d['spectra'][ex_toggle],
                 name=name
             ))
+
+    import uuid
 
     if len(fig.data) == 0:
         st.warning("No spectra available for selected excitation.")
@@ -253,16 +116,11 @@ for i, (name, d) in enumerate(data.items()):
             template="plotly_white"
         )
 
-
-import uuid  # ✅ add this once at top if not already present
-
-st.plotly_chart(
-    fig,
-    use_container_width=True,
-    key=f"spectra_overlay_{uuid.uuid4()}"
-)
-
-
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            key=f"spectra_overlay_{uuid.uuid4()}"
+        )
 
     # =====================
     # ✅ APIES
@@ -274,7 +132,7 @@ st.plotly_chart(
     fig2.add_trace(go.Scatter(
         x=df['Index'],
         y=df['IR/IF'],
-        name='IR/IF',
+        name='IR/IF (AUC)',
         mode='lines+markers'
     ))
 
@@ -286,6 +144,7 @@ st.plotly_chart(
     ))
 
     st.plotly_chart(fig2, use_container_width=True, key="apies_plot")
+
 
 # =====================
 # KINETICS (RESTORED)
