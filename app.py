@@ -112,10 +112,17 @@ files = st.sidebar.file_uploader(
 ex_toggle = st.sidebar.radio("Spectra View", [280, 260])
 
 if files:
+
     st.session_state.datasets = {}
-    for f in files[:200]:
+
+    for i, f in enumerate(files[:200]):
+
         parsed = parse_file(f.read(), f.name)
-        st.session_state.datasets[parsed['filename']] = parsed
+
+        # ✅ Force unique names (CRITICAL FIX)
+        unique_name = f"{parsed['filename']}_{i}"
+
+        st.session_state.datasets[unique_name] = parsed
 
 # =====================
 # LOAD DATA
