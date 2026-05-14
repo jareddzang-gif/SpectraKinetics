@@ -253,11 +253,14 @@ for i, (name, d) in enumerate(data.items()):
             template="plotly_white"
         )
 
-       st.plotly_chart(
-    fig,
-    use_container_width=True,
-    key=f"spectra_{ex_toggle}_{len(fig.data)}"
-)
+
+    # ✅ CORRECT INDENTATION HERE
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        key=f"spectra_overlay_{ex_toggle}_{len(fig.data)}"
+    )
+
 
 
     # =====================
