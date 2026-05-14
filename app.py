@@ -309,21 +309,22 @@ if page == "Kinetics":
         st.plotly_chart(fig_auc, use_container_width=True, key="auc_plot")
 
 # =====================
-# ✅ AUC (FIXED)
-# =====================
-
-# =====================
-# AUC ANALYSIS
+# ✅ AUC ANALYSIS (FINAL CLEAN VERSION)
 # =====================
 if page == "AUC Analysis":
 
     st.title("AUC Analysis")
 
     # ---- SELECT DATASET ----
-    selected_file = st.selectbox("Dataset", list(data.keys()))
+    selected_file = st.selectbox(
+        "Dataset",
+        list(data.keys()),
+        key="auc_dataset_select"
+    )
+
     d = data[selected_file]
 
-    # ---- EXTRACT DATA ----
+    # ---- VALIDATION ----
     if ex_toggle not in d['spectra']:
         st.warning("Selected excitation not available.")
         st.stop()
@@ -331,11 +332,17 @@ if page == "AUC Analysis":
     wl = d['wavelengths']
     y = d['spectra'][ex_toggle]
 
+    if len(wl) == 0:
+        st.warning("No wavelength data available.")
+        st.stop()
+
     # ---- LIMITS ----
     min_wl = float(np.min(wl))
     max_wl = float(np.max(wl))
 
-    # ---- INPUT RANGE (THIS DEFINES start_wl / end_wl) ----
+    # =====================
+    # ✅ INPUT RANGE
+    # =====================
     st.subheader("Select Wavelength Range")
 
     col1, col2 = st.columns(2)
@@ -345,7 +352,8 @@ if page == "AUC Analysis":
             "Start Wavelength (nm)",
             min_value=min_wl,
             max_value=max_wl,
-            value=float(min_wl + 20)
+            value=float(min_wl + 20),
+            key="start_wl_input"
         )
 
     with col2:
@@ -353,13 +361,16 @@ if page == "AUC Analysis":
             "End Wavelength (nm)",
             min_value=min_wl,
             max_value=max_wl,
-            value=float(max_wl - 20)
+            value=float(max_wl - 20),
+            key="end_wl_input"
         )
 
-    # ✅ fix ordering automatically
-    start_wl, end_wl = sorted([start_wl, end_wl])
+    # ✅ ensure correct ordering
+    start_wl, end_wl = sorted([float(start_wl), float(end_wl)])
 
-    # ---- SINGLE AUC ----
+    # =====================
+    # ✅ SINGLE DATASET AUC
+    # =====================
     mask = (wl >= start_wl) & (wl <= end_wl)
 
     if np.any(mask):
@@ -367,7 +378,6 @@ if page == "AUC Analysis":
     else:
         area = 0
 
-    # ---- PLOT ----
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(x=wl, y=y, name="Full Spectrum"))
@@ -382,295 +392,95 @@ if page == "AUC Analysis":
     st.plotly_chart(fig, use_container_width=True, key="auc_single")
 
     st.metric("AUC", f"{area:.3f}")
+    st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
 
+    # =====================
+    # ✅ BATCH AUC
+    # =====================
+    st.markdown("---")
 
-# =====================
-# ✅ AUC INPUT (FULL FIXED BLOCK)
-# =====================
-st.subheader("Select Wavelength Range")
-
-# ---- Select dataset ----
-selected_file = st.selectbox(
-    "Dataset",
-    list(data.keys()),
-    key="auc_dataset_select"
-)
-
-d = data[selected_file]
-
-# ---- Extract data ----
-if ex_toggle not in d['spectra']:
-    st.warning("Selected excitation not available.")
-    st.stop()
-
-wl = d['wavelengths']
-y = d['spectra'][ex_toggle]
-
-if len(wl) == 0:
-    st.warning("No wavelength data available.")
-    st.stop()
-
-# ---- Limits ----
-min_wl = float(np.min(wl))
-max_wl = float(np.max(wl))
-
-# ---- Inputs (CRITICAL SECTION) ----
-col1, col2 = st.columns(2)
-
-with col1:
-    start_wl = st.number_input(
-        "Start Wavelength (nm)",
-        min_value=min_wl,
-        max_value=max_wl,
-        value=float(min_wl + 20),
-        key="start_wl_input"
+    run_batch = st.button(
+        "Calculate AUC for All Datasets",
+        key="auc_batch_button"
     )
 
-with col2:
-    end_wl = st.number_input(
-        "End Wavelength (nm)",
-        min_value=min_wl,
-        max_value=max_wl,
-        value=float(max_wl - 20),
-        key="end_wl_input"
-    )
+    if run_batch:
 
-# ✅ CRITICAL: THIS MUST BE AFTER INPUTS (INDENTED AT SAME LEVEL)
-start_wl, end_wl = sorted([float(start_wl), float(end_wl)])
-    st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch_plot")
+        results = []
 
-    st.subheader("AUC Results")
-    st.dataframe(df_auc)
-        
-# ✅ Only run if inputs exist (CRITICAL FIX)
-if run_batch:
+        for name, dataset in data.items():
 
-    results = []
+            if ex_toggle not in dataset['spectra']:
+                continue
 
-    for name, dataset in data.items():
+            wl_full = dataset['wavelengths']
+            y_full = dataset['spectra'][ex_toggle]
 
-        if ex_toggle not in dataset['spectra']:
-            continue
+            if len(wl_full) == 0:
+                continue
 
-        wl_full = dataset['wavelengths']
-        y_full = dataset['spectra'][ex_toggle]
+            mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
 
-        if len(wl_full) == 0:
-            continue
+            if not np.any(mask_full):
+                continue
 
-        mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
+            auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
 
-        if not np.any(mask_full):
-            continue
+            try:
+                timestamp = pd.to_datetime(name.split("_")[0])
+            except:
+                continue
 
-        auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
+            results.append({
+                "time": timestamp,
+                "AUC": auc_val,
+                "file": name
+            })
 
-        try:
-            timestamp = pd.to_datetime(name.split("_")[0], format="%Y-%m-%d-%H-%M-%S")
-        except:
-            continue
+        if len(results) == 0:
+            st.warning("No valid datasets for AUC calculation.")
+        else:
+            df_auc = pd.DataFrame(results).sort_values("time")
 
-        results.append({
-            "time": timestamp,
-            "AUC": auc_val,
-            "file": name
-        })
+            # ✅ regression
+            time_numeric = (df_auc["time"] - df_auc["time"].iloc[0]).dt.total_seconds()
+            y_vals = df_auc["AUC"].values
 
-    if len(results) == 0:
-        st.warning("No valid datasets for AUC calculation.")
-    else:
-        df_auc = pd.DataFrame(results).sort_values("time")
+            coeffs = np.polyfit(time_numeric, y_vals, 1)
+            fit_line = np.polyval(coeffs, time_numeric)
 
-        fig_auc = go.Figure()
+            ss_res = np.sum((y_vals - fit_line) ** 2)
+            ss_tot = np.sum((y_vals - np.mean(y_vals)) ** 2)
+            r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
 
-        fig_auc.add_trace(go.Scatter(
-            x=df_auc["time"],
-            y=df_auc["AUC"],
-            mode="lines+markers",
-            name="AUC over Time"
-        ))
+            # ✅ plot
+            fig_auc = go.Figure()
 
-        st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch_plot")
+            fig_auc.add_trace(go.Scatter(
+                x=df_auc["time"],
+                y=y_vals,
+                mode="lines+markers",
+                name="AUC"
+            ))
 
-        st.subheader("AUC Results Table")
-        st.dataframe(df_auc)
+            fig_auc.add_trace(go.Scatter(
+                x=df_auc["time"],
+                y=fit_line,
+                mode="lines",
+                name=f"Linear Fit (R² = {r2:.4f})",
+                line=dict(dash="dash")
+            ))
 
-    # ---- FILE SELECTION ----
-    selected_file = st.selectbox("Dataset", list(data.keys()))
-    d = data[selected_file]
+            fig_auc.update_layout(
+                title="AUC vs Time",
+                xaxis_title="Time",
+                yaxis_title="AUC",
+                template="plotly_white"
+            )
 
-    # ✅ Check spectra exists
-    if ex_toggle not in d['spectra']:
-        st.warning("Selected excitation wavelength not available in this dataset.")
-        st.stop()
+            st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch_plot")
 
-    # ---- DATA EXTRACTION ----
-    wl = d['wavelengths']
-    y = d['spectra'][ex_toggle]
+            st.subheader("AUC Results Table")
+            st.dataframe(df_auc)
 
-    # ✅ Ensure valid data
-    if len(wl) == 0 or len(y) == 0:
-        st.warning("No spectral data available.")
-        st.stop()
-
-    # ---- LIMITS ----
-    min_wl = float(np.min(wl))
-    max_wl = float(np.max(wl))
-
-    # ---- INPUT UI ----
-    st.subheader("Select Wavelength Range")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        start_wl = st.number_input(
-            "Start Wavelength (nm)",
-            min_value=min_wl,
-            max_value=max_wl,
-            value=float(min_wl + 20)
-        )
-
-    with col2:
-        end_wl = st.number_input(
-            "End Wavelength (nm)",
-            min_value=min_wl,
-            max_value=max_wl,
-            value=float(max_wl - 20)
-        )
-# ✅ Ensure variables always exist (CRITICAL FIX)
-start_wl = float(start_wl)
-end_wl = float(end_wl)
-
-
-    # ✅ safer handling (NO stop, just fix automatically)
-start_wl, end_wl = sorted([start_wl, end_wl])
-
-    # ---- AUC ----
-mask = (wl >= start_wl) & (wl <= end_wl)
-
-if not np.any(mask):
-    st.warning("Selected range contains no data.")
-    st.stop()
-
-area = np.trapezoid(y[mask], wl[mask])
-
-    # ---- PLOT ----
-fig = go.Figure()
-
-fig.add_trace(go.Scatter(
-    x=wl,
-    y=y,
-    name='Full Spectrum',
-    line=dict(color='black')
-))
-
-fig.add_trace(go.Scatter(
-    x=wl[mask],
-    y=y[mask],
-    name='Selected Region',
-    fill='tozeroy',
-    line=dict(color='orange')
-))
-
-fig.update_layout(
-    title="AUC Selection",
-    xaxis_title="Wavelength (nm)",
-    yaxis_title="Intensity",
-    template='plotly_white'
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-    # ---- OUTPUT ----
-st.subheader("AUC Result")
-st.metric("Area Under Curve", f"{area:.3f}")
-st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
-
-st.markdown("---")
-
-run_batch = st.button("Calculate AUC for All Datasets")
-
-if run_batch:
-
-    results = []
-
-    for name, dataset in data.items():
-
-        if ex_toggle not in dataset['spectra']:
-            continue
-
-        wl_full = dataset['wavelengths']
-        y_full = dataset['spectra'][ex_toggle]
-
-        if len(wl_full) == 0:
-            continue
-
-        mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
-
-        if not np.any(mask_full):
-            continue
-
-        auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
-
-        try:
-            timestamp = pd.to_datetime(name, format="%Y-%m-%d-%H-%M-%S")
-        except:
-            continue
-
-        results.append({
-            "time": timestamp,
-            "AUC": auc_val,
-            "file": name
-        })
-
-    if len(results) == 0:
-        st.warning("No valid datasets for AUC calculation.")
-
-    else:
-        df_auc = pd.DataFrame(results).sort_values("time")
-
-        # ✅ REGRESSION SECTION (NOW SAFE)
-
-        time_numeric = (df_auc["time"] - df_auc["time"].iloc[0]).dt.total_seconds()
-        y = df_auc["AUC"].values
-
-        coeffs = np.polyfit(time_numeric, y, 1)
-        fit_line = np.polyval(coeffs, time_numeric)
-
-        ss_res = np.sum((y - fit_line) ** 2)
-        ss_tot = np.sum((y - np.mean(y)) ** 2)
-        r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
-
-        # ✅ PLOT
-        fig_auc = go.Figure()
-
-        fig_auc.add_trace(go.Scatter(
-            x=df_auc["time"],
-            y=y,
-            mode="lines+markers",
-            name="AUC"
-        ))
-
-        fig_auc.add_trace(go.Scatter(
-            x=df_auc["time"],
-            y=fit_line,
-            mode="lines",
-            name=f"Linear Fit (R² = {r2:.4f})",
-            line=dict(dash="dash")
-        ))
-
-        fig_auc.update_layout(
-            title="AUC vs Time with Linear Fit",
-            xaxis_title="Time",
-            yaxis_title="AUC",
-            template="plotly_white"
-        )
-
-        st.plotly_chart(fig_auc, use_container_width=True)
-
-        # ✅ TABLE
-        st.subheader("AUC Results Table")
-        st.dataframe(df_auc)
-
-        # ✅ R² DISPLAY
-        st.metric("R² (Linear Fit)", f"{r2:.4f}")
+            st.metric("R² (Linear Fit)", f"{r2:.4f}")
