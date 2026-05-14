@@ -496,94 +496,95 @@ st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
     # =====================
 st.markdown("---")
 
-    run_batch = st.button(
-        "Calculate AUC for All Datasets",
-        key="auc_batch_button"
-    )
-
-    if run_batch:
-
-        results = []
-
-        for name, dataset in data.items():
-
-            if ex_toggle not in dataset['spectra']:
-                continue
-
-            wl_full = dataset['wavelengths']
-            y_full = dataset['spectra'][ex_toggle]
-
-            if len(wl_full) == 0:
-                continue
-
-            mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
-
-            if not np.any(mask_full):
-                continue
-
-            auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
-
-            try:
-                timestamp = pd.to_datetime(name.split("_")[0])
-            except:
-                continue
-
-            results.append({
-                "time": timestamp,
-                "AUC": auc_val,
-                "file": name
-            })
-
-        if len(results) == 0:
-            st.warning("No valid datasets for AUC calculation.")
-        else:
-            df_auc = pd.DataFrame(results).sort_values("time")
-
-            # ✅ regression
-            time_numeric = (df_auc["time"] - df_auc["time"].iloc[0]).dt.total_seconds()
-            y_vals = df_auc["AUC"].values
-
-            coeffs = np.polyfit(time_numeric, y_vals, 1)
-            fit_line = np.polyval(coeffs, time_numeric)
-
-            ss_res = np.sum((y_vals - fit_line) ** 2)
-            ss_tot = np.sum((y_vals - np.mean(y_vals)) ** 2)
-            r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
-
-            # ✅ plot
-            fig_auc = go.Figure()
-
-            fig_auc.add_trace(go.Scatter(
-                x=df_auc["time"],
-                y=y_vals,
-                mode="lines+markers",
-                name="AUC"
-            ))
-
-            fig_auc.add_trace(go.Scatter(
-                x=df_auc["time"],
-                y=fit_line,
-                mode="lines",
-                name=f"Linear Fit (R² = {r2:.4f})",
-                line=dict(dash="dash")
-            ))
-
-            fig_auc.update_layout(
-                title="AUC vs Time",
-                xaxis_title="Time",
-                yaxis_title="AUC",
-                template="plotly_white"
-            )
-
-            import uuid
-
-st.plotly_chart(
-    fig_auc,
-    use_container_width=True,
-    key=f"auc_batch_plot_{uuid.uuid4()}"
+run_batch = st.button(
+    "Calculate AUC for All Datasets",
+    key="auc_batch_button"
 )
 
-            st.subheader("AUC Results Table")
-            st.dataframe(df_auc)
+if run_batch:
 
-            st.metric("R² (Linear Fit)", f"{r2:.4f}")
+    results = []
+
+    for name, dataset in data.items():
+
+        if ex_toggle not in dataset['spectra']:
+            continue
+
+        wl_full = dataset['wavelengths']
+        y_full = dataset['spectra'][ex_toggle]
+
+        if len(wl_full) == 0:
+            continue
+
+        mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
+
+        if not np.any(mask_full):
+            continue
+
+        auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
+
+        try:
+            timestamp = pd.to_datetime(name.split("_")[0])
+        except:
+            continue
+
+        results.append({
+            "time": timestamp,
+            "AUC": auc_val,
+            "file": name
+        })
+
+    if len(results) == 0:
+        st.warning("No valid datasets for AUC calculation.")
+    else:
+        df_auc = pd.DataFrame(results).sort_values("time")
+
+        # ✅ regression
+        time_numeric = (df_auc["time"] - df_auc["time"].iloc[0]).dt.total_seconds()
+        y_vals = df_auc["AUC"].values
+
+        coeffs = np.polyfit(time_numeric, y_vals, 1)
+        fit_line = np.polyval(coeffs, time_numeric)
+
+        ss_res = np.sum((y_vals - fit_line) ** 2)
+        ss_tot = np.sum((y_vals - np.mean(y_vals)) ** 2)
+        r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
+
+        # ✅ plot
+        fig_auc = go.Figure()
+
+        fig_auc.add_trace(go.Scatter(
+            x=df_auc["time"],
+            y=y_vals,
+            mode="lines+markers",
+            name="AUC"
+        ))
+
+        fig_auc.add_trace(go.Scatter(
+            x=df_auc["time"],
+            y=fit_line,
+            mode="lines",
+            name=f"Linear Fit (R² = {r2:.4f})",
+            line=dict(dash="dash")
+        ))
+
+        fig_auc.update_layout(
+            title="AUC vs Time",
+            xaxis_title="Time",
+            yaxis_title="AUC",
+            template="plotly_white"
+        )
+
+        # ✅ FIXED plotting placement
+        import uuid
+
+        st.plotly_chart(
+            fig_auc,
+            use_container_width=True,
+            key=f"auc_batch_plot_{uuid.uuid4()}"
+        )
+
+        st.subheader("AUC Results Table")
+        st.dataframe(df_auc)
+
+        st.metric("R² (Linear Fit)", f"{r2:.4f}")
