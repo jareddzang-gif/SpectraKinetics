@@ -1,12 +1,15 @@
+# v11.7 FULL RESTORE + AUC FIX
+# Restores FULL Spectra + Kinetics pages (from working versions)
+# Keeps AUC (fixed with np.trapezoid)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import io, zipfile, re
 
-st.set_page_config(page_title='SpectraKinetics v11.6 (AUC)', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v11.7', layout='wide')
 
-# NAV
 page = st.sidebar.radio("Navigation", ["Spectra Analysis", "Kinetics", "AUC Analysis"])
 
 # CLEAN NAME
@@ -77,81 +80,143 @@ data = st.session_state.get('datasets', {})
 if not data:
     st.stop()
 
-# ============================
-# AUC PAGE (NEW)
-# ============================
+# =====================
+# SPECTRA (RESTORED)
+# =====================
+if page == "Spectra Analysis":
+
+    st.title("Spectra Analysis")
+
+    rows = []
+
+    for i,(name,d) in enumerate(data.items()):
+        if 280 not in d['spectra']: continue
+
+        wl = d['wavelengths']
+        y = d['spectra'][280]
+
+        ir_idx = np.argmax(y)
+        ir_peak = wl[ir_idx]
+        ir_int = y[ir_idx]
+
+        mask = (wl>=300)&(wl<=390)
+        if np.any(mask):
+            y_if = y[mask]
+            wl_if = wl[mask]
+            idx = np.argmax(y_if)
+            if_peak = wl_if[idx]
+            if_int = y_if[idx]
+        else:
+            if_peak = np.nan
+            if_int = np.nan
+
+        nearest = lambda v: np.argmin(np.abs(wl-v))
+        irif = y[nearest(280)]/y[nearest(340)] if y[nearest(340)]!=0 else np.nan
+        pie = y[nearest(350)]/y[nearest(330)] if y[nearest(330)]!=0 else np.nan
+
+        rows.append({
+            "File":name,
+            "Index":i,
+            "IR/IF":irif,
+            "I350/I330":pie,
+            "Aggregation Index":np.nan,
+            "Concentration (mg/mL)":np.nan,
+            "IR (nm)":ir_peak,
+            "IR Peak Intensity":ir_int,
+            "IF (nm)":if_peak,
+            "IF Peak Intensity":if_int
+        })
+
+    df = pd.DataFrame(rows)
+    st.dataframe(df, use_container_width=True)
+
+    fig = go.Figure()
+    for name,d in data.items():
+        if ex_toggle in d['spectra']:
+            fig.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][ex_toggle], name=name))
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    fig2 = go.Figure()
+    fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF'))
+    fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330'))
+
+    st.plotly_chart(fig2, use_container_width=True)
+
+# =====================
+# KINETICS (RESTORED)
+# =====================
+if page == "Kinetics":
+
+    st.title("Kinetics Analysis")
+
+    segments_280, segments_350 = [], []
+    sorted_items = sorted(data.items(), key=lambda x: x[0])
+    time_offset = 0
+
+    for name, d in sorted_items:
+        if d['kinetics'] is None:
+            continue
+
+        kin = d['kinetics']
+        times = kin['times']
+
+        if len(times) == 0:
+            continue
+
+        wl = kin['wavelengths']
+        matrix = kin['matrix']
+
+        if len(wl) == 0 or matrix.size == 0:
+            continue
+
+        idx_280 = np.argmin(np.abs(wl-280))
+        idx_350 = np.argmin(np.abs(wl-350))
+
+        signal_280 = matrix[idx_280,:]
+        signal_350 = matrix[idx_350,:]
+
+        shifted_time = times + time_offset
+
+        segments_280.append((shifted_time, signal_280))
+        segments_350.append((shifted_time, signal_350))
+
+        time_offset += (times[-1] - times[0])
+
+    if segments_280:
+        fig_k = go.Figure()
+
+        for t,y in segments_280:
+            fig_k.add_trace(go.Scatter(x=t, y=y, name='280 nm'))
+        for t,y in segments_350:
+            fig_k.add_trace(go.Scatter(x=t, y=y, name='350 nm'))
+
+        st.plotly_chart(fig_k, use_container_width=True)
+
+# =====================
+# ✅ AUC (FIXED)
+# =====================
 if page == "AUC Analysis":
 
-    st.title("Area Under the Curve (AUC) Analysis")
+    st.title("AUC Analysis")
 
-    file_names = list(data.keys())
-    selected_file = st.selectbox("Select Dataset", file_names)
-
+    selected_file = st.selectbox("Dataset", list(data.keys()))
     d = data[selected_file]
-
-    if ex_toggle not in d['spectra']:
-        st.warning("Selected excitation wavelength not available.")
-        st.stop()
 
     wl = d['wavelengths']
     y = d['spectra'][ex_toggle]
 
-    # sliders
-    min_wl, max_wl = float(np.min(wl)), float(np.max(wl))
+    start, end = st.slider("Range", float(min(wl)), float(max(wl)), (float(min(wl)+10), float(max(wl)-10)))
 
-    start_wl, end_wl = st.slider(
-        "Select Wavelength Range",
-        min_value=min_wl,
-        max_value=max_wl,
-        value=(min_wl+20, max_wl-20)
-    )
+    mask = (wl >= start) & (wl <= end)
+    area = np.trapezoid(y[mask], wl[mask]) if np.any(mask) else 0
 
-    # mask region
-    mask = (wl >= start_wl) & (wl <= end_wl)
-    area = np.trapz(y[mask], wl[mask]) if np.any(mask) else 0
-
-    # plot
     fig = go.Figure()
+    fig.add_trace(go.Scatter(x=wl, y=y, name='Full'))
+    fig.add_trace(go.Scatter(x=wl[mask], y=y[mask], fill='tozeroy', name='Selected'))
 
-    fig.add_trace(go.Scatter(x=wl, y=y, name='Full Spectrum', line=dict(color='black')))
-
-    fig.add_trace(go.Scatter(
-        x=wl[mask],
-        y=y[mask],
-        name='Selected Region',
-        fill='tozeroy',
-        line=dict(color='orange')
-    ))
-
-    fig.update_layout(
-        title="AUC Selection",
-        xaxis_title="Wavelength (nm)",
-        yaxis_title="Intensity",
-        template='plotly_white'
-    )
-
-    st.plotly_chart(fig, use_container_width=True, key="auc_plot")
-
-    # output
-    st.subheader("AUC Result")
-    st.metric(label="Area Under Curve", value=f"{area:.3f}")
-
-    st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
-
-# ============================
-# EXISTING PAGES NOT TOUCHED
-# ============================
-if page == "Spectra Analysis":
-    st.title("Spectra Analysis (unchanged — see previous version)")
-
-if page == "Kinetics":
-    st.title("Kinetics Analysis (unchanged — see previous version)")
+    st.plotly_chart(fig, use_container_width=True)
+    st.metric("AUC", f"{area:.3f}")
 
 # EXPORT
 st.sidebar.markdown("---")
-if st.sidebar.button("Download Analysis CSV"):
-    buf=io.BytesIO()
-    with zipfile.ZipFile(buf,'w') as z:
-        z.writestr('analysis.csv','')
-    buf.seek(0)
-    st.sidebar.download_button("Download", buf, "spectrakinetics_v11_6.zip")
