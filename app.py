@@ -159,21 +159,21 @@ rows.append({
             "IF Peak Intensity":if_int
         })
 
-    df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True)
+df = pd.DataFrame(rows)
+st.dataframe(df, use_container_width=True)
 
-    fig = go.Figure()
-    for name,d in data.items():
-        if ex_toggle in d['spectra']:
-            fig.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][ex_toggle], name=name))
+fig = go.Figure()
+for name,d in data.items():
+    if ex_toggle in d['spectra']:
+        fig.add_trace(go.Scatter(x=d['wavelengths'], y=d['spectra'][ex_toggle], name=name))
 
-    st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True)
 
-    fig2 = go.Figure()
-    fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF'))
-    fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330'))
+fig2 = go.Figure()
+fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF'))
+fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330'))
 
-    st.plotly_chart(fig2, use_container_width=True)
+st.plotly_chart(fig2, use_container_width=True)
 
 # =====================
 # KINETICS (RESTORED)
