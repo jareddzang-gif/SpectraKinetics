@@ -383,69 +383,61 @@ if page == "AUC Analysis":
 
     st.metric("AUC", f"{area:.3f}")
 
-    # =====================
-    # ✅ BATCH AUC (THIS IS WHERE YOUR ERROR WAS)
-    # =====================
-    st.markdown("---")
 
 # =====================
-# ✅ BATCH AUC (FULL FIX)
+# ✅ AUC INPUT (FULL FIXED BLOCK)
 # =====================
-st.markdown("---")
+st.subheader("Select Wavelength Range")
 
-run_batch = st.button(
-    "Calculate AUC for All Datasets",
-    key="auc_batch_button"
+# ---- Select dataset ----
+selected_file = st.selectbox(
+    "Dataset",
+    list(data.keys()),
+    key="auc_dataset_select"
 )
 
-if run_batch:
+d = data[selected_file]
 
-    results = []  # ✅ ALWAYS CREATED HERE
+# ---- Extract data ----
+if ex_toggle not in d['spectra']:
+    st.warning("Selected excitation not available.")
+    st.stop()
 
-    for name, dataset in data.items():
+wl = d['wavelengths']
+y = d['spectra'][ex_toggle]
 
-        if ex_toggle not in dataset['spectra']:
-            continue
+if len(wl) == 0:
+    st.warning("No wavelength data available.")
+    st.stop()
 
-        wl_full = dataset['wavelengths']
-        y_full = dataset['spectra'][ex_toggle]
+# ---- Limits ----
+min_wl = float(np.min(wl))
+max_wl = float(np.max(wl))
 
-        if len(wl_full) == 0:
-            continue
+# ---- Inputs (CRITICAL SECTION) ----
+col1, col2 = st.columns(2)
 
-        mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
+with col1:
+    start_wl = st.number_input(
+        "Start Wavelength (nm)",
+        min_value=min_wl,
+        max_value=max_wl,
+        value=float(min_wl + 20),
+        key="start_wl_input"
+    )
 
-        if not np.any(mask_full):
-            continue
+with col2:
+    end_wl = st.number_input(
+        "End Wavelength (nm)",
+        min_value=min_wl,
+        max_value=max_wl,
+        value=float(max_wl - 20),
+        key="end_wl_input"
+    )
 
-        auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
-
-        try:
-            timestamp = pd.to_datetime(name.split("_")[0])
-        except:
-            continue
-
-        results.append({
-            "time": timestamp,
-            "AUC": auc_val,
-            "file": name
-        })
-
-    # ✅ IMPORTANT: everything using results stays INSIDE this block
-    if len(results) == 0:
-        st.warning("No valid datasets for AUC calculation.")
-    else:
-        df_auc = pd.DataFrame(results).sort_values("time")
-
-        fig_auc = go.Figure()
-
-        fig_auc.add_trace(go.Scatter(
-            x=df_auc["time"],
-            y=df_auc["AUC"],
-            mode="lines+markers",
-            name="AUC over Time"
-        ))
-
+# ✅ CRITICAL: THIS MUST BE AFTER INPUTS (INDENTED AT SAME LEVEL)
+start_wl, end_wl = sorted([float(start_wl), float(end_wl)])
+``
         st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch_plot")
 
         st.subheader("AUC Results")
