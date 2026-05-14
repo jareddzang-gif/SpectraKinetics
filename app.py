@@ -147,16 +147,32 @@ if page == "Spectra Analysis":
     ir_start, ir_end = sorted([ir_start, ir_end])
     if_start, if_end = sorted([if_start, if_end])
 
-    rows = []
+rows = []
 
-    for i, (name, d) in enumerate(data.items()):
+for i, (name, d) in enumerate(data.items()):
 
-        if 280 not in d['spectra']:
-            continue
+    wl = d['wavelengths']
 
-        wl = d['wavelengths']
+    # ✅ allow missing spectra instead of skipping
+    if 280 in d['spectra']:
         y = d['spectra'][280]
+    else:
+        y = None
 
+    # ✅ handle missing or empty data safely
+    if y is None or len(wl) == 0:
+
+        ir_peak = np.nan
+        ir_int = np.nan
+        if_peak = np.nan
+        if_int = np.nan
+        auc_ir = np.nan
+        auc_if = np.nan
+        irif = np.nan
+        pie = np.nan
+
+    else:
+        # ---- peak calculations ----
         ir_idx = np.argmax(y)
         ir_peak = wl[ir_idx]
         ir_int = y[ir_idx]
@@ -173,33 +189,10 @@ if page == "Spectra Analysis":
             if_peak = np.nan
             if_int = np.nan
 
-        # ✅ AUC IR
+        # ---- AUC IR ----
         mask_ir = (wl >= ir_start) & (wl <= ir_end)
-        auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir]) if np.any(mask_ir) else np.nan
 
-        # ✅ AUC IF
-        mask_if = (wl >= if_start) & (wl <= if_end)
-        auc_if = np.trapezoid(y[mask_if], wl[mask_if]) if np.any(mask_if) else np.nan
-
-        # ✅ ratio
-        irif = auc_ir / auc_if if (not np.isnan(auc_if) and auc_if != 0) else np.nan
-
-        # ✅ pie ratio still works
-        nearest = lambda v: np.argmin(np.abs(wl - v))
-        pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
-
-        rows.append({
-            "File": name,
-            "Index": i,
-            "IR/IF": irif,
-            "I350/I330": pie,
-            "Aggregation Index": np.nan,
-            "Concentration (mg/mL)": np.nan,
-            "IR (nm)": ir_peak,
-            "IR Peak Intensity": ir_int,
-            "IF (nm)": if_peak,
-            "IF Peak Intensity": if_int
-        })
+   
 # =====================
 # TABLE (UPGRADED)
 # =====================
