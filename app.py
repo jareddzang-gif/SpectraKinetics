@@ -495,7 +495,7 @@ st.plotly_chart(fig, use_container_width=True, key="auc_single_plot")
 # ✅ Outputs
 st.metric("AUC", f"{area:.3f}")
 st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
-``
+
     # =====================
     # ✅ BATCH AUC
     # =====================
