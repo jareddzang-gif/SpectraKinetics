@@ -259,12 +259,23 @@ st.download_button(
 fig = go.Figure()
 
 for name, d in data.items():
-    if ex_toggle in d['spectra']:
-        fig.add_trace(go.Scatter(
-            x=d['wavelengths'],
-            y=d['spectra'][ex_toggle],
-            name=name
-        ))
+
+    spectra_dict = d.get('spectra', {})
+    wl = d.get('wavelengths', [])
+
+    if ex_toggle not in spectra_dict:
+        continue
+
+    if len(wl) == 0:
+        continue
+
+    fig.add_trace(go.Scatter(
+        x=wl,
+        y=spectra_dict[ex_toggle],
+        name=name
+    ))
+df = pd.DataFrame(rows)
+st.dataframe(df, use_container_width=True)
 
 fig.update_layout(
     title=f"Full Spectra Overlay (Ex {ex_toggle} nm)",
