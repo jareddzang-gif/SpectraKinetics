@@ -3,6 +3,136 @@
 # =====================
 # SPECTRA ANALYSIS (FINAL CLEAN VERSION)
 # =====================
+
+# =====================
+# IMPORTS
+# =====================
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import io, zipfile, re
+
+# =====================
+# CONFIG
+# =====================
+st.set_page_config(page_title='SpectraKinetics v11.7', layout='wide')
+
+# =====================
+# PAGE SELECTOR
+# =====================
+page = st.sidebar.radio(
+    "Navigation",
+    ["Spectra Analysis", "Kinetics", "AUC Analysis"]
+)
+
+# =====================
+# CLEAN NAME FUNCTION
+# =====================
+def clean_filename(name):
+    match = re.search(r"(\\d{4}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2})", name)
+    return match.group(1) if match else name[:15]
+
+# =====================
+# PARSER FUNCTION
+# =====================
+def parse_file(file_bytes, filename):
+    content = file_bytes.decode('utf-8', errors='replace').splitlines()
+
+    spectra = {}
+    wavelengths = []
+    ex_vals = []
+    kinetics = None
+
+    # --- Kinetics ---
+    for i, line in enumerate(content):
+        if "kinetic time" in line.lower():
+            parts = line.split("\t")
+            blank_idx = next((j for j, p in enumerate(parts) if p.strip() == ""), None)
+
+            if blank_idx is not None:
+                times = [float(x) for x in parts[blank_idx+1:] if x]
+                wl, mat = [], []
+
+                for row in content[i+1:]:
+                    r = row.split("\t")
+                    try:
+                        wl.append(float(r[1]))
+                        mat.append([float(x) for x in r[blank_idx+1:blank_idx+1+len(times)]])
+                    except:
+                        continue
+
+                kinetics = {
+                    "times": np.array(times),
+                    "wavelengths": np.array(wl),
+                    "matrix": np.array(mat)
+                }
+
+    # --- Spectra ---
+    for i, line in enumerate(content):
+        parts = line.split("\t")
+
+        if 'excitation wavelength' in parts[0].lower():
+            ex_vals = [float(v) for v in parts[2:] if v]
+
+        if parts[0].isdigit():
+            data_start = i
+            break
+
+    matrix = []
+
+    for line in content[data_start:]:
+        parts = line.split("\t")
+        try:
+            wavelengths.append(float(parts[1]))
+            matrix.append([float(x) for x in parts[2:2+len(ex_vals)]])
+        except:
+            continue
+
+    matrix = np.array(matrix) if len(matrix) > 0 else np.array([])
+
+    for j, ex in enumerate(ex_vals if len(matrix) > 0 else []):
+        spectra[ex] = matrix[:, j]
+
+    return {
+        'wavelengths': np.array(wavelengths),
+        'spectra': spectra,
+        'filename': clean_filename(filename),
+        'kinetics': kinetics
+    }
+
+# =====================
+# FILE UPLOAD
+# =====================
+files = st.sidebar.file_uploader(
+    "Upload ≤200 files",
+    type=['txt'],
+    accept_multiple_files=True
+)
+
+ex_toggle = st.sidebar.radio("Spectra View", [280, 260])
+
+if files:
+
+    st.session_state.datasets = {}
+
+    for i, f in enumerate(files[:200]):
+
+        parsed = parse_file(f.read(), f.name)
+
+        # ✅ Force unique names (CRITICAL FIX)
+        unique_name = f"{parsed['filename']}_{i}"
+
+        st.session_state.datasets[unique_name] = parsed
+
+# =====================
+# LOAD DATA
+# =====================
+data = st.session_state.get('datasets', {})
+
+if not data:
+    st.stop()
+
 if page == "Spectra Analysis":
 
     st.title("Spectra Analysis")
