@@ -151,60 +151,62 @@ rows = []
 
 for i, (name, d) in enumerate(data.items()):
 
-    wl = d['wavelengths']
+    wl = d.get('wavelengths', np.array([]))
+    spectra_dict = d.get('spectra', {})
 
-    # ✅ allow missing spectra instead of skipping
-    if 280 in d['spectra']:
-        y = d['spectra'][280]
-    else:
-        y = None
+    # ✅ Default everything to NaN (NEVER skip dataset)
+    ir_peak = np.nan
+    ir_int = np.nan
+    if_peak = np.nan
+    if_int = np.nan
+    auc_ir = np.nan
+    auc_if = np.nan
+    irif = np.nan
+    pie = np.nan
 
-    # ✅ handle missing or empty data safely
-    if y is None or len(wl) == 0:
+    # ✅ Only compute if valid 280 spectrum exists
+    if 280 in spectra_dict and len(wl) > 0:
 
-        ir_peak = np.nan
-        ir_int = np.nan
-        if_peak = np.nan
-        if_int = np.nan
-        auc_ir = np.nan
-        auc_if = np.nan
-        irif = np.nan
-        pie = np.nan
+        y = spectra_dict[280]
 
-    else:
-        # ---- peak calculations ----
-        ir_idx = np.argmax(y)
-        ir_peak = wl[ir_idx]
-        ir_int = y[ir_idx]
+        if len(y) > 0:
 
-        mask = (wl >= 300) & (wl <= 390)
+            # ---- IR peak ----
+            ir_idx = np.argmax(y)
+            ir_peak = wl[ir_idx]
+            ir_int = y[ir_idx]
 
-        if np.any(mask):
-            y_if = y[mask]
-            wl_if = wl[mask]
-            idx = np.argmax(y_if)
-            if_peak = wl_if[idx]
-            if_int = y_if[idx]
-        else:
-            if_peak = np.nan
-            if_int = np.nan
+            # ---- IF peak ----
+            mask_if_peak = (wl >= 300) & (wl <= 390)
 
-        # ---- AUC IR ----
-        mask_ir = (wl >= ir_start) & (wl <= ir_end)
-        auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir]) if np.any(mask_ir) else np.nan
+            if np.any(mask_if_peak):
+                y_if = y[mask_if_peak]
+                wl_if = wl[mask_if_peak]
+                idx = np.argmax(y_if)
+                if_peak = wl_if[idx]
+                if_int = y_if[idx]
 
-        # ---- AUC IF ----
-        mask_if = (wl >= if_start) & (wl <= if_end)
-        auc_if = np.trapezoid(y[mask_if], wl[mask_if]) if np.any(mask_if) else np.nan
+            # ---- AUC IR ----
+            mask_ir = (wl >= ir_start) & (wl <= ir_end)
+            if np.any(mask_ir):
+                auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir])
 
-        # ---- IR/IF ratio ----
-        irif = auc_ir / auc_if if (not np.isnan(auc_if) and auc_if != 0) else np.nan
+            # ---- AUC IF ----
+            mask_if = (wl >= if_start) & (wl <= if_end)
+            if np.any(mask_if):
+                auc_if = np.trapezoid(y[mask_if], wl[mask_if])
 
-        # ---- I350/I330 ----
-        nearest = lambda v: np.argmin(np.abs(wl - v))
-        pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
+            # ---- ratio ----
+            if not np.isnan(auc_if) and auc_if != 0:
+                irif = auc_ir / auc_if
 
-    # ✅ ALWAYS append (even if NaN)
+            # ---- pie ratio ----
+            nearest = lambda v: np.argmin(np.abs(wl - v))
+            if len(wl) > 0:
+                if y[nearest(330)] != 0:
+                    pie = y[nearest(350)] / y[nearest(330)]
+
+    # ✅ ALWAYS append row (no skipping)
     rows.append({
         "File": name,
         "Sample #": i + 1,
@@ -217,7 +219,6 @@ for i, (name, d) in enumerate(data.items()):
         "IF (nm)": if_peak,
         "IF Peak Intensity": if_int
     })
-   
 # =====================
 # TABLE (UPGRADED)
 # =====================
