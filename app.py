@@ -196,11 +196,20 @@ if page == "Kinetics":
 # =====================
 # ✅ AUC (FIXED)
 # =====================
-# ---- Extract data FIRST ----
+# ---- FILE SELECTION ----
+selected_file = st.selectbox("Dataset", list(data.keys()))
+d = data[selected_file]
+
+# ---- DATA EXTRACTION ----
 wl = d['wavelengths']
 y = d['spectra'][ex_toggle]
 
-# ✅ DEFINE THESE BEFORE ANY INPUTS
+# ---- SAFETY CHECK ----
+if len(wl) == 0:
+    st.warning("No wavelength data available")
+    st.stop()
+
+# ---- DEFINE LIMITS ----
 min_wl = float(np.min(wl))
 max_wl = float(np.max(wl))
 
@@ -225,11 +234,10 @@ with col2:
         value=float(max_wl - 20)
     )
 
-# ---- SAFETY CHECK ----
 if start_wl >= end_wl:
     st.warning("Start wavelength must be less than end wavelength")
     st.stop()
 
-# ---- AUC CALCULATION ----
+# ---- AUC ----
 mask = (wl >= start_wl) & (wl <= end_wl)
 area = np.trapezoid(y[mask], wl[mask]) if np.any(mask) else 0
