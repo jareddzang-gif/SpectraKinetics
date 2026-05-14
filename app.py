@@ -200,8 +200,7 @@ if page == "Spectra Analysis":
             "IF (nm)": if_peak,
             "IF Peak Intensity": if_int
         })
-
-  # =====================
+# =====================
 # TABLE (UPGRADED)
 # =====================
 df = pd.DataFrame(rows)
@@ -255,15 +254,26 @@ fig.update_layout(
     template="plotly_white"
 )
 
+# ---- Spectra Plot ----
 st.plotly_chart(fig, use_container_width=True, key="spectra_plot")
 
-st.plotly_chart(fig2, use_container_width=True, key="apies_plot")
-# ✅ APIES
+# ---- APIES Plot ----
 fig2 = go.Figure()
-fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF'))
-fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330'))
 
-st.plotly_chart(fig_k, use_container_width=True, key="kinetics_plot")
+fig2.add_trace(go.Scatter(
+    x=df['Sample #'],
+    y=df['IR/IF'],
+    name='IR/IF'
+))
+
+fig2.add_trace(go.Scatter(
+    x=df['Sample #'],
+    y=df['I350/I330'],
+    name='I350/I330'
+))
+
+st.plotly_chart(fig2, use_container_width=True, key="apies_plot")
+
 
 # =====================
 # KINETICS (RESTORED)
