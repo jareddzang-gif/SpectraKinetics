@@ -452,7 +452,6 @@ if run_batch:
 
         st.subheader("AUC Results Table")
         st.dataframe(df_auc)
-``
 
     # ---- FILE SELECTION ----
     selected_file = st.selectbox("Dataset", list(data.keys()))
