@@ -191,7 +191,33 @@ for i, (name, d) in enumerate(data.items()):
 
         # ---- AUC IR ----
         mask_ir = (wl >= ir_start) & (wl <= ir_end)
+        auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir]) if np.any(mask_ir) else np.nan
 
+        # ---- AUC IF ----
+        mask_if = (wl >= if_start) & (wl <= if_end)
+        auc_if = np.trapezoid(y[mask_if], wl[mask_if]) if np.any(mask_if) else np.nan
+
+        # ---- IR/IF ratio ----
+        irif = auc_ir / auc_if if (not np.isnan(auc_if) and auc_if != 0) else np.nan
+
+        # ---- I350/I330 ----
+        nearest = lambda v: np.argmin(np.abs(wl - v))
+        pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
+
+    # ✅ ALWAYS append (even if NaN)
+    rows.append({
+        "File": name,
+        "Sample #": i + 1,
+        "IR/IF": irif,
+        "I350/I330": pie,
+        "AUC IR": auc_ir,
+        "AUC IF": auc_if,
+        "IR (nm)": ir_peak,
+        "IR Peak Intensity": ir_int,
+        "IF (nm)": if_peak,
+        "IF Peak Intensity": if_int
+    })
+``
    
 # =====================
 # TABLE (UPGRADED)
