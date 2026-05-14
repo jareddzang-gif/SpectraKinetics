@@ -169,6 +169,33 @@ if page == "Spectra Analysis":
         wl = d['wavelengths']
         y = d['spectra'][280]
 
+        # =====================
+# ✅ AUC IR / IF CALCULATION
+# =====================
+
+# ---- IR AUC ----
+mask_ir = (wl >= ir_start) & (wl <= ir_end)
+
+if np.any(mask_ir):
+    auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir])
+else:
+    auc_ir = np.nan
+
+# ---- IF AUC ----
+mask_if_auc = (wl >= if_start) & (wl <= if_end)
+
+if np.any(mask_if_auc):
+    auc_if = np.trapezoid(y[mask_if_auc], wl[mask_if_auc])
+else:
+    auc_if = np.nan
+
+# ---- AUC-based IR/IF ratio ----
+if not np.isnan(auc_if) and auc_if != 0:
+    irif = auc_ir / auc_if
+else:
+    irif = np.nan
+
+        
         ir_idx = np.argmax(y)
         ir_peak = wl[ir_idx]
         ir_int = y[ir_idx]
@@ -193,7 +220,9 @@ if page == "Spectra Analysis":
         rows.append({
             "File": name,
             "Index": i,
-            "IR/IF": irif,
+            "IR/IF (AUC)": irif,
+            "AUC IR": auc_ir,
+            "AUC IF": auc_if,
             "I350/I330": pie,
             "Aggregation Index": np.nan,
             "Concentration (mg/mL)": np.nan,
