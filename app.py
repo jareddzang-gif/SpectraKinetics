@@ -146,7 +146,7 @@ else:
 irif = auc_ir / auc_if if auc_if not in [0, np.nan] else np.nan
 
 
-        rows.append({
+rows.append({
             "File":name,
             "Index":i,
             "IR/IF":irif,
