@@ -551,16 +551,16 @@ end_wl = float(end_wl)
 
 
     # ✅ safer handling (NO stop, just fix automatically)
-    start_wl, end_wl = sorted([start_wl, end_wl])
+start_wl, end_wl = sorted([start_wl, end_wl])
 
     # ---- AUC ----
-    mask = (wl >= start_wl) & (wl <= end_wl)
+mask = (wl >= start_wl) & (wl <= end_wl)
 
-    if not np.any(mask):
-        st.warning("Selected range contains no data.")
-        st.stop()
+if not np.any(mask):
+    st.warning("Selected range contains no data.")
+    st.stop()
 
-    area = np.trapezoid(y[mask], wl[mask])
+area = np.trapezoid(y[mask], wl[mask])
 
     # ---- PLOT ----
     fig = go.Figure()
