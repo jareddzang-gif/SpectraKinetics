@@ -208,12 +208,22 @@ for name, d in data.items():
 
     if ex_toggle in d['spectra']:
 
+        y = d['spectra'][ex_toggle]
+
         fig.add_trace(go.Scatter(
             x=d['wavelengths'],
-            y=d['spectra'][ex_toggle],
+            y=y,
             name=name
         ))
 
+    else:
+        # fallback (prevents empty plots)
+        for ex, y in d['spectra'].items():
+            fig.add_trace(go.Scatter(
+                x=d['wavelengths'],
+                y=y,
+                name=f"{name} (Ex {ex})"
+            ))
 st.plotly_chart(fig, use_container_width=True, key=f"spectra_{ex_toggle}")
 
 # =====================
