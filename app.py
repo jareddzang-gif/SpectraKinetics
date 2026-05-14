@@ -206,8 +206,31 @@ if page == "AUC Analysis":
     wl = d['wavelengths']
     y = d['spectra'][ex_toggle]
 
-    start, end = st.slider("Range", float(min(wl)), float(max(wl)), (float(min(wl)+10), float(max(wl)-10)))
+    st.subheader("Select Wavelength Range")
 
+col1, col2 = st.columns(2)
+
+with col1:
+    start_wl = st.number_input(
+        "Start Wavelength (nm)",
+        min_value=min_wl,
+        max_value=max_wl,
+        value=float(min_wl + 20)
+    )
+
+with col2:
+    end_wl = st.number_input(
+        "End Wavelength (nm)",
+        min_value=min_wl,
+        max_value=max_wl,
+        value=float(max_wl - 20)
+    )
+
+    
+if start_wl >= end_wl:
+    st.warning("Start wavelength must be less than end wavelength")
+    st.stop()
+    
     mask = (wl >= start) & (wl <= end)
     area = np.trapezoid(y[mask], wl[mask]) if np.any(mask) else 0
 
