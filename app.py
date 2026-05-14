@@ -390,6 +390,9 @@ if page == "Kinetics":
 # =====================
 # ✅ AUC ANALYSIS (FINAL CLEAN VERSION)
 # =====================
+# =====================
+# ✅ AUC ANALYSIS (FINAL STABLE FIX)
+# =====================
 if page == "AUC Analysis":
 
     st.title("AUC Analysis")
@@ -420,7 +423,7 @@ if page == "AUC Analysis":
     max_wl = float(np.max(wl))
 
     # =====================
-    # ✅ INPUT RANGE
+    # ✅ INPUT RANGE (MUST COME FIRST)
     # =====================
     st.subheader("Select Wavelength Range")
 
@@ -444,57 +447,53 @@ if page == "AUC Analysis":
             key="end_wl_input"
         )
 
-    # ✅ ensure correct ordering
-    start_wl, end_wl = sorted([float(start_wl), float(end_wl)])
+    # ✅ NOW define properly BEFORE using
+    start_wl = float(start_wl)
+    end_wl = float(end_wl)
+    start_wl, end_wl = sorted([start_wl, end_wl])
 
-# =====================
-# ✅ SINGLE DATASET AUC + VISUALIZATION (CORRECT ORDER)
-# =====================
+    # =====================
+    # ✅ AUC CALCULATION (AFTER INPUTS)
+    # =====================
+    mask = (wl >= start_wl) & (wl <= end_wl)
 
-# ✅ Ensure inputs ALWAYS exist before use
-start_wl = float(start_wl)
-end_wl = float(end_wl)
-start_wl, end_wl = sorted([start_wl, end_wl])
+    if np.any(mask):
+        area = np.trapezoid(y[mask], wl[mask])
+    else:
+        area = 0
 
-# ✅ Now safe to calculate
-mask = (wl >= start_wl) & (wl <= end_wl)
+    # =====================
+    # ✅ VISUALIZATION
+    # =====================
+    fig = go.Figure()
 
-if np.any(mask):
-    area = np.trapezoid(y[mask], wl[mask])
-else:
-    area = 0
-
-# ✅ Plot full spectrum + selected region
-fig = go.Figure()
-
-fig.add_trace(go.Scatter(
-    x=wl,
-    y=y,
-    name="Full Spectrum",
-    line=dict(color='black')
-))
-
-if np.any(mask):
     fig.add_trace(go.Scatter(
-        x=wl[mask],
-        y=y[mask],
-        fill='tozeroy',
-        name="Selected Region (AUC)",
-        line=dict(color='orange')
+        x=wl,
+        y=y,
+        name="Full Spectrum",
+        line=dict(color='black')
     ))
 
-fig.update_layout(
-    title=f"AUC Selection ({start_wl:.1f}–{end_wl:.1f} nm)",
-    xaxis_title="Wavelength (nm)",
-    yaxis_title="Intensity",
-    template="plotly_white"
-)
+    if np.any(mask):
+        fig.add_trace(go.Scatter(
+            x=wl[mask],
+            y=y[mask],
+            fill='tozeroy',
+            name="Selected Region (AUC)",
+            line=dict(color='orange')
+        ))
 
-st.plotly_chart(fig, use_container_width=True, key="auc_single_plot")
+    fig.update_layout(
+        title=f"AUC Selection ({start_wl:.1f}–{end_wl:.1f} nm)",
+        xaxis_title="Wavelength (nm)",
+        yaxis_title="Intensity",
+        template="plotly_white"
+    )
 
-# ✅ Outputs
-st.metric("AUC", f"{area:.3f}")
-st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
+    st.plotly_chart(fig, use_container_width=True, key="auc_single_plot")
+
+    st.metric("AUC", f"{area:.3f}")
+    st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
 
     # =====================
     # ✅ BATCH AUC
