@@ -196,17 +196,16 @@ if page == "Kinetics":
 # =====================
 # ✅ AUC (FIXED)
 # =====================
-if page == "AUC Analysis":
+# ---- Extract data FIRST ----
+wl = d['wavelengths']
+y = d['spectra'][ex_toggle]
 
-    st.title("AUC Analysis")
+# ✅ DEFINE THESE BEFORE ANY INPUTS
+min_wl = float(np.min(wl))
+max_wl = float(np.max(wl))
 
-    selected_file = st.selectbox("Dataset", list(data.keys()))
-    d = data[selected_file]
-
-    wl = d['wavelengths']
-    y = d['spectra'][ex_toggle]
-
-    st.subheader("Select Wavelength Range")
+# ---- INPUT UI ----
+st.subheader("Select Wavelength Range")
 
 col1, col2 = st.columns(2)
 
@@ -226,26 +225,11 @@ with col2:
         value=float(max_wl - 20)
     )
 
-wl = d['wavelengths']
-y = d['spectra'][ex_toggle]
-
-# ✅ REQUIRED (this was missing)
-min_wl, max_wl = float(np.min(wl)), float(np.max(wl))
-
-    
+# ---- SAFETY CHECK ----
 if start_wl >= end_wl:
     st.warning("Start wavelength must be less than end wavelength")
     st.stop()
-    
-    mask = (wl >= start) & (wl <= end)
-    area = np.trapezoid(y[mask], wl[mask]) if np.any(mask) else 0
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=wl, y=y, name='Full'))
-    fig.add_trace(go.Scatter(x=wl[mask], y=y[mask], fill='tozeroy', name='Selected'))
-
-    st.plotly_chart(fig, use_container_width=True)
-    st.metric("AUC", f"{area:.3f}")
-
-# EXPORT
-st.sidebar.markdown("---")
+# ---- AUC CALCULATION ----
+mask = (wl >= start_wl) & (wl <= end_wl)
+area = np.trapezoid(y[mask], wl[mask]) if np.any(mask) else 0
