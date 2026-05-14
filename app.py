@@ -87,6 +87,24 @@ if page == "Spectra Analysis":
 
     st.title("Spectra Analysis")
 
+    st.subheader("AUC Ratio Settings")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("**IR Range (nm)**")
+    ir_start = st.number_input("IR Start", value=270.0)
+    ir_end = st.number_input("IR End", value=300.0)
+
+with col2:
+    st.markdown("**IF Range (nm)**")
+    if_start = st.number_input("IF Start", value=320.0)
+    if_end = st.number_input("IF End", value=390.0)
+
+# ✅ safety (prevents crashes)
+ir_start, ir_end = sorted([ir_start, ir_end])
+if_start, if_end = sorted([if_start, if_end])
+    
     rows = []
 
     for i,(name,d) in enumerate(data.items()):
@@ -110,9 +128,25 @@ if page == "Spectra Analysis":
             if_peak = np.nan
             if_int = np.nan
 
-        nearest = lambda v: np.argmin(np.abs(wl-v))
-        irif = y[nearest(280)]/y[nearest(340)] if y[nearest(340)]!=0 else np.nan
-        pie = y[nearest(350)]/y[nearest(330)] if y[nearest(330)]!=0 else np.nan
+        # ---- AUC-based IR ----
+mask_ir = (wl >= ir_start) & (wl <= ir_end)
+
+if np.any(mask_ir):
+    auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir])
+else:
+    auc_ir = np.nan
+
+# ---- AUC-based IF ----
+mask_if = (wl >= if_start) & (wl <= if_end)
+
+if np.any(mask_if):
+    auc_if = np.trapezoid(y[mask_if], wl[mask_if])
+else:
+    auc_if = np.nan
+
+# ---- IR/IF ratio ----
+irif = auc_ir / auc_if if auc_if not in [0, np.nan] else np.nan
+
 
         rows.append({
             "File":name,
