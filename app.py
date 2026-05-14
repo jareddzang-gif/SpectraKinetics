@@ -494,7 +494,7 @@ st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
     # =====================
     # ✅ BATCH AUC
     # =====================
-    st.markdown("---")
+st.markdown("---")
 
     run_batch = st.button(
         "Calculate AUC for All Datasets",
