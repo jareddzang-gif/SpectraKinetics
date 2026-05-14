@@ -389,47 +389,52 @@ if page == "AUC Analysis":
     st.markdown("---")
 
 # =====================
-# ✅ BATCH AUC (FINAL CLEAN VERSION)
+# ✅ AUC INPUT (FINAL FIXED VERSION)
 # =====================
-st.markdown("---")
+st.subheader("Select Wavelength Range")
 
-run_batch = st.button(
-    "Calculate AUC for All Datasets",
-    key="auc_batch_button"
-)
+# ---- Extract current dataset ----
+selected_file = st.selectbox("Dataset", list(data.keys()), key="auc_dataset")
+d = data[selected_file]
 
-if run_batch:
+# ---- Extract data safely ----
+if ex_toggle not in d['spectra']:
+    st.warning("Selected excitation not available in this dataset.")
+    st.stop()
 
-    results = []
+wl = d['wavelengths']
+y = d['spectra'][ex_toggle]
 
-    for name, dataset in data.items():
+if len(wl) == 0:
+    st.warning("No wavelength data available.")
+    st.stop()
 
-        if ex_toggle not in dataset['spectra']:
-            continue
+min_wl = float(np.min(wl))
+max_wl = float(np.max(wl))
 
-        wl_full = dataset['wavelengths']
-        y_full = dataset['spectra'][ex_toggle]
+# ---- Input fields (CRITICAL: these define start_wl) ----
+col1, col2 = st.columns(2)
 
-        if len(wl_full) == 0:
-            continue
+with col1:
+    start_wl = st.number_input(
+        "Start Wavelength (nm)",
+        min_value=min_wl,
+        max_value=max_wl,
+        value=float(min_wl + 20),
+        key="start_wl_input"
+    )
 
-        mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
+with col2:
+    end_wl = st.number_input(
+        "End Wavelength (nm)",
+        min_value=min_wl,
+        max_value=max_wl,
+        value=float(max_wl - 20),
+        key="end_wl_input"
+    )
 
-        if not np.any(mask_full):
-            continue
-
-        auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
-
-        try:
-            timestamp = pd.to_datetime(name.split("_")[0])
-        except:
-            continue
-
-        results.append({
-            "time": timestamp,
-            "AUC": auc_val,
-            "file": name
-        })
+# ✅ GUARANTEED safe after inputs exist
+start_wl, end_wl = sorted([float(start_wl), float(end_wl)])
 
     if len(results) == 0:
         st.warning("No valid datasets for AUC calculation.")
