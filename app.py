@@ -436,24 +436,24 @@ with col2:
 # ✅ GUARANTEED safe after inputs exist
 start_wl, end_wl = sorted([float(start_wl), float(end_wl)])
 
-    if len(results) == 0:
-        st.warning("No valid datasets for AUC calculation.")
-    else:
-        df_auc = pd.DataFrame(results).sort_values("time")
+if len(results) == 0:
+    st.warning("No valid datasets for AUC calculation.")
+else:
+    df_auc = pd.DataFrame(results).sort_values("time")
 
-        fig_auc = go.Figure()
+    fig_auc = go.Figure()
 
-        fig_auc.add_trace(go.Scatter(
-            x=df_auc["time"],
-            y=df_auc["AUC"],
-            mode="lines+markers",
-            name="AUC over Time"
-        ))
+    fig_auc.add_trace(go.Scatter(
+        x=df_auc["time"],
+        y=df_auc["AUC"],
+        mode="lines+markers",
+        name="AUC over Time"
+    ))
 
-        st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch_plot")
+    st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch_plot")
 
-        st.subheader("AUC Results")
-        st.dataframe(df_auc)
+    st.subheader("AUC Results")
+    st.dataframe(df_auc)
 
 # ✅ Only run if inputs exist (CRITICAL FIX)
 if run_batch:
