@@ -217,7 +217,6 @@ for i, (name, d) in enumerate(data.items()):
         "IF (nm)": if_peak,
         "IF Peak Intensity": if_int
     })
-``
    
 # =====================
 # TABLE (UPGRADED)
