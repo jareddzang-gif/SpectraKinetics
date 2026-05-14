@@ -222,4 +222,3 @@ if page == "AUC Analysis":
 
         df_auc = pd.DataFrame(results)
         st.dataframe(df_auc)
-``
