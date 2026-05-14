@@ -252,16 +252,15 @@ if page == "Spectra Analysis":
             key=f"spectra_overlay_{uuid.uuid4()}"
         )
 
-   # =====================
-# ✅ APIES WITH REGRESSION
+# =====================
+# ✅ APIES WITH REGRESSION (FINAL CLEAN)
 # =====================
 
-df = pd.DataFrame(rows)
-
-fig2 = go.Figure()
-
-x_vals = df['Index'].values
-
+# ✅ SAFE: ensure df exists ONLY if we're in Spectra context
+try:
+    df = pd.DataFrame(rows)
+except:
+    st.stop()
 
 st.header("APIES (All Metrics Overlay)")
 
@@ -337,8 +336,6 @@ fig2.update_layout(
 )
 
 st.plotly_chart(fig2, use_container_width=True, key="apies_regression")
-
-
 
 # =====================
 # KINETICS (RESTORED)
