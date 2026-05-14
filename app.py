@@ -332,7 +332,134 @@ if page == "Kinetics":
 # AUC ANALYSIS
 # =====================
 if page == "AUC Analysis":
+# =====================
+# AUC ANALYSIS
+# =====================
+if page == "AUC Analysis":
 
+    st.title("AUC Analysis")
+
+    # ---- SELECT DATASET ----
+    selected_file = st.selectbox("Dataset", list(data.keys()))
+    d = data[selected_file]
+
+    # ---- EXTRACT DATA ----
+    if ex_toggle not in d['spectra']:
+        st.warning("Selected excitation not available.")
+        st.stop()
+
+    wl = d['wavelengths']
+    y = d['spectra'][ex_toggle]
+
+    # ---- LIMITS ----
+    min_wl = float(np.min(wl))
+    max_wl = float(np.max(wl))
+
+    # ---- INPUT RANGE (THIS DEFINES start_wl / end_wl) ----
+    st.subheader("Select Wavelength Range")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        start_wl = st.number_input(
+            "Start Wavelength (nm)",
+            min_value=min_wl,
+            max_value=max_wl,
+            value=float(min_wl + 20)
+        )
+
+    with col2:
+        end_wl = st.number_input(
+            "End Wavelength (nm)",
+            min_value=min_wl,
+            max_value=max_wl,
+            value=float(max_wl - 20)
+        )
+
+    # ✅ fix ordering automatically
+    start_wl, end_wl = sorted([start_wl, end_wl])
+
+    # ---- SINGLE AUC ----
+    mask = (wl >= start_wl) & (wl <= end_wl)
+
+    if np.any(mask):
+        area = np.trapezoid(y[mask], wl[mask])
+    else:
+        area = 0
+
+    # ---- PLOT ----
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(x=wl, y=y, name="Full Spectrum"))
+
+    fig.add_trace(go.Scatter(
+        x=wl[mask],
+        y=y[mask],
+        fill='tozeroy',
+        name="Selected Region"
+    ))
+
+    st.plotly_chart(fig, use_container_width=True, key="auc_single")
+
+    st.metric("AUC", f"{area:.3f}")
+
+    # =====================
+    # ✅ BATCH AUC (THIS IS WHERE YOUR ERROR WAS)
+    # =====================
+    st.markdown("---")
+
+    run_batch = st.button("Calculate AUC for All Datasets")
+
+    if run_batch:
+
+        results = []
+
+        for name, dataset in data.items():
+
+            if ex_toggle not in dataset['spectra']:
+                continue
+
+            wl_full = dataset['wavelengths']
+            y_full = dataset['spectra'][ex_toggle]
+
+            if len(wl_full) == 0:
+                continue
+
+            mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
+
+            if not np.any(mask_full):
+                continue
+
+            auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
+
+            try:
+                timestamp = pd.to_datetime(name, format="%Y-%m-%d-%H-%M-%S")
+            except:
+                continue
+
+            results.append({
+                "time": timestamp,
+                "AUC": auc_val,
+                "file": name
+            })
+
+        if len(results) == 0:
+            st.warning("No valid datasets.")
+        else:
+            df_auc = pd.DataFrame(results).sort_values("time")
+
+            fig_auc = go.Figure()
+
+            fig_auc.add_trace(go.Scatter(
+                x=df_auc["time"],
+                y=df_auc["AUC"],
+                mode="lines+markers",
+                name="AUC over Time"
+            ))
+
+            st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch")
+
+            st.dataframe(df_auc)
     st.title("AUC Analysis")
 
     # ---- FILE SELECTION ----
