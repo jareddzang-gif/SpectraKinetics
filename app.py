@@ -1,4 +1,4 @@
-# v14 FINAL (FULLY FIXED + APIES DASHBOARD)
+# v15 FINAL – APIES MULTI-AXIS + OVERLAY + CLEAN AUC
 
 import streamlit as st
 import pandas as pd
@@ -6,7 +6,7 @@ import numpy as np
 import plotly.graph_objects as go
 import re
 
-st.set_page_config(page_title='SpectraKinetics v14', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v15', layout='wide')
 
 page = st.sidebar.radio("Navigation",
                         ["APIES Dashboard", "Kinetics", "AUC Analysis"])
@@ -22,19 +22,16 @@ def clean_filename(name):
 
 def parse_file(file_bytes, filename):
     content = file_bytes.decode("utf-8", errors="replace").splitlines()
-
     spectra, wavelengths, ex_vals = {}, [], []
 
     for i, line in enumerate(content):
         if "excitation wavelength" in line.lower():
             ex_vals = [float(v) for v in line.split("\t")[2:] if v]
-
         if line.split("\t")[0].isdigit():
             start = i
             break
 
     matrix = []
-
     for line in content[start:]:
         parts = line.split("\t")
         try:
@@ -53,7 +50,7 @@ def parse_file(file_bytes, filename):
             "filename": clean_filename(filename)}
 
 # =====================
-# FILE LOAD
+# LOAD FILES
 # =====================
 files = st.sidebar.file_uploader("Upload", type=["txt"], accept_multiple_files=True)
 
@@ -108,8 +105,11 @@ if page == "APIES Dashboard":
         irif_auc = auc_ir / auc_if if auc_if != 0 else np.nan
         i350_i330 = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
 
+        t = pd.to_datetime(name.split("_")[0], errors='coerce')
+
         rows.append({
             "File": name,
+            "Time": t,
             "Index": i,
             "IR/IF (AUC)": irif_auc,
             "I350/I330": i350_i330,
@@ -122,43 +122,77 @@ if page == "APIES Dashboard":
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True)
 
-    # ✅ APIES FULL DASHBOARD
-    st.subheader("APIES Dashboard Plot")
+    # =====================
+    # ✅ FULL SPECTRA OVERLAY (RESTORED)
+    # =====================
+    st.subheader("Spectra Overlay")
+
+    fig_spec = go.Figure()
+
+    for name, d in data.items():
+        if ex_toggle in d["spectra"]:
+            fig_spec.add_trace(go.Scatter(
+                x=d["wavelengths"],
+                y=d["spectra"][ex_toggle],
+                name=name
+            ))
+
+    fig_spec.update_layout(
+        xaxis_title="Wavelength",
+        yaxis_title="Intensity"
+    )
+
+    st.plotly_chart(fig_spec, use_container_width=True)
+
+    # =====================
+    # ✅ MULTI-AXIS APIES DASHBOARD
+    # =====================
+    st.subheader("APIES Multi-Metric Dashboard")
+
+    df = df.sort_values("Time")
+
+    x_vals = df["Time"].fillna(df["Index"])
 
     fig = go.Figure()
-    x = df["Index"].values
 
-    def add_metric(y_vals, name):
-        if len(x) > 1 and not np.all(np.isnan(y_vals)):
-            coeffs = np.polyfit(x, y_vals, 1)
-            fit = np.polyval(coeffs, x)
+    # ✅ LEFT AXIS (PRIMARY)
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=df["IR/IF (AUC)"],
+        name="IR/IF",
+        mode="lines+markers",
+        yaxis="y1"
+    ))
 
-            ss_res = np.sum((y_vals - fit)**2)
-            ss_tot = np.sum((y_vals - np.mean(y_vals))**2)
-            r2 = 1 - ss_res/ss_tot if ss_tot != 0 else np.nan
+    # ✅ RIGHT AXIS (SECONDARY)
+    metrics_right = [
+        ("I350/I330", df["I350/I330"]),
+        ("AUC IR", df["AUC IR"]),
+        ("AUC IF", df["AUC IF"])
+    ]
 
-            fig.add_trace(go.Scatter(
-                x=x, y=y_vals,
-                mode="lines+markers",
-                name=f"{name} (R²={r2:.3f})"
-            ))
+    for name, series in metrics_right:
+        fig.add_trace(go.Scatter(
+            x=x_vals,
+            y=series,
+            name=name,
+            mode="lines+markers",
+            yaxis="y2"
+        ))
 
-            fig.add_trace(go.Scatter(
-                x=x, y=fit,
-                mode="lines",
-                name=f"{name} Fit",
-                line=dict(dash="dash")
-            ))
-
-    add_metric(df["IR/IF (AUC)"].values, "IR/IF")
-    add_metric(df["I350/I330"].values, "I350/I330")
-    add_metric(df["AUC IR"].values, "AUC IR")
-    add_metric(df["AUC IF"].values, "AUC IF")
+    fig.update_layout(
+        xaxis=dict(title="Time / Sample"),
+        yaxis=dict(title="IR/IF (AUC)", side="left"),
+        yaxis2=dict(title="Other Metrics",
+                    overlaying='y',
+                    side='right'),
+        template="plotly_white"
+    )
 
     st.plotly_chart(fig, use_container_width=True)
 
 # =====================
-# ✅ AUC ANALYSIS
+# ✅ AUC ANALYSIS (FINAL CLEAN)
 # =====================
 if page == "AUC Analysis":
 
@@ -168,7 +202,7 @@ if page == "AUC Analysis":
     d = data[selected]
 
     if ex_toggle not in d["spectra"]:
-        st.warning("No data for this excitation")
+        st.warning("No excitation data")
         st.stop()
 
     wl = d["wavelengths"]
@@ -188,13 +222,14 @@ if page == "AUC Analysis":
     if np.any(mask):
         fig.add_trace(go.Scatter(
             x=wl[mask], y=y[mask],
-            fill="tozeroy", name="AUC Region"
+            fill="tozeroy",
+            name="AUC Region"
         ))
 
     st.plotly_chart(fig)
     st.metric("AUC", f"{area:.3f}")
 
-    # ✅ Batch
+    # ✅ BATCH FIXED
     if st.button("Calculate AUC for All Datasets"):
 
         results = []
@@ -213,14 +248,20 @@ if page == "AUC Analysis":
             auc_val = np.trapezoid(y_f[mask], wl_f[mask])
 
             t = pd.to_datetime(name.split("_")[0], errors='coerce')
+            if pd.isna(t):
+                continue
 
             results.append({"time": t, "AUC": auc_val})
 
-        df_auc = pd.DataFrame(results).dropna().sort_values("time")
+        df_auc = (
+            pd.DataFrame(results)
+            .groupby("time", as_index=False)
+            .mean()
+            .sort_values("time")
+        )
 
         st.dataframe(df_auc)
 
-        # ✅ regression
         x = np.arange(len(df_auc))
         y_vals = df_auc["AUC"].values
 
@@ -232,18 +273,18 @@ if page == "AUC Analysis":
         r2 = 1 - ss_res/ss_tot if ss_tot != 0 else np.nan
 
         fig_auc = go.Figure()
-
         fig_auc.add_trace(go.Scatter(
-            x=df_auc["time"], y=y_vals,
-            mode="lines+markers",
-            name=f"AUC (R²={r2:.3f})"
+            x=df_auc["time"],
+            y=y_vals,
+            name=f"AUC (R²={r2:.3f})",
+            mode="lines+markers"
         ))
 
         fig_auc.add_trace(go.Scatter(
-            x=df_auc["time"], y=fit,
-            mode="lines",
+            x=df_auc["time"],
+            y=fit,
             name="Fit",
             line=dict(dash="dash")
         ))
 
-        st.plotly_chart(fig_auc)
+        st.plotly_chart(fig_auc, use_container_width=True)
