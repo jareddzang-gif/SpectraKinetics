@@ -217,7 +217,7 @@ if page == "Spectra Analysis":
         })
 
     df = pd.DataFrame(rows)
-
+    st.session_state["spectra_df"] = df
     st.dataframe(df, use_container_width=True)
 
     # =====================
