@@ -202,29 +202,56 @@ st.dataframe(df, use_container_width=True)
 # =====================
 st.header(f"Spectra Overlay (Ex {ex_toggle})")
 
+# =====================
+# ✅ FULL SPECTRA OVERLAY (ROBUST VERSION)
+# =====================
+st.header(f"Spectra Overlay (Ex {ex_toggle})")
+
 fig = go.Figure()
 
 for name, d in data.items():
 
-    if ex_toggle in d['spectra']:
+    spectra_dict = d.get('spectra', {})
+    wl = d.get('wavelengths', [])
 
-        y = d['spectra'][ex_toggle]
+    # ✅ Skip only truly invalid datasets
+    if len(wl) == 0 or len(spectra_dict) == 0:
+        continue
+
+    # ✅ If selected excitation exists → plot normally
+    if ex_toggle in spectra_dict:
 
         fig.add_trace(go.Scatter(
-            x=d['wavelengths'],
-            y=y,
+            x=wl,
+            y=spectra_dict[ex_toggle],
             name=name
         ))
 
     else:
-        # fallback (prevents empty plots)
-        for ex, y in d['spectra'].items():
+        # ✅ fallback: plot whatever exists (prevents empty graph)
+        for ex, y in spectra_dict.items():
+
             fig.add_trace(go.Scatter(
-                x=d['wavelengths'],
+                x=wl,
                 y=y,
                 name=f"{name} (Ex {ex})"
             ))
-st.plotly_chart(fig, use_container_width=True, key=f"spectra_{ex_toggle}")
+
+# ✅ safety: if nothing plotted, show message instead of blank
+if len(fig.data) == 0:
+    st.warning("No spectra available to display. Check excitation selection.")
+else:
+    fig.update_layout(
+        xaxis_title="Wavelength (nm)",
+        yaxis_title="Intensity",
+        template="plotly_white"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        key=f"spectra_overlay_{ex_toggle}"
+    )
 
 # =====================
 # ✅ APIES (UNCHANGED WORKING VERSION)
