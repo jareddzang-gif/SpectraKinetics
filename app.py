@@ -1,4 +1,4 @@
-# v16 FINAL CLEAN BUILD
+# v17 FINAL STABLE (APIES + REGRESSION + CLEAN AUC)
 
 import streamlit as st
 import pandas as pd
@@ -6,7 +6,7 @@ import numpy as np
 import plotly.graph_objects as go
 import re
 
-st.set_page_config(page_title='SpectraKinetics v16', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v17', layout='wide')
 
 page = st.sidebar.radio("Navigation",
                         ["APIES Dashboard", "AUC Analysis"])
@@ -14,7 +14,7 @@ page = st.sidebar.radio("Navigation",
 ex_toggle = st.sidebar.radio("Spectra View", [280, 260])
 
 # =====================
-# ✅ TIMESTAMP PARSER (FIXED)
+# ✅ TIMESTAMP EXTRACTION (YOUR FORMAT)
 # =====================
 def extract_time(name):
     match = re.search(r"(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})_(\d{2})", name)
@@ -29,6 +29,7 @@ def extract_time(name):
 # PARSER
 # =====================
 def parse_file(file_bytes, filename):
+
     content = file_bytes.decode("utf-8", errors="replace").splitlines()
 
     spectra, wavelengths, ex_vals = {}, [], []
@@ -75,7 +76,7 @@ if files:
 data = st.session_state.get("datasets", {})
 
 if not data:
-    st.info("Upload files to begin.")
+    st.info("Upload data to begin.")
     st.stop()
 
 # =====================
@@ -116,31 +117,26 @@ if page == "APIES Dashboard":
         auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir])
         auc_if = np.trapezoid(y[mask_if], wl[mask_if])
 
-        irif = auc_ir / auc_if if auc_if != 0 else np.nan
-        i350_i330 = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
+        irif_auc = auc_ir / auc_if if auc_if != 0 else np.nan
+        ratio = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
 
         rows.append({
             "File": name,
             "Time": extract_time(name),
             "Index": i,
-            "IR/IF (AUC)": irif,
-            "I350/I330": i350_i330,
+            "IR/IF (AUC)": irif_auc,
+            "I350/I330": ratio,
             "AUC IR": auc_ir,
-            "AUC IF": auc_if,
-            "Aggregation Index": np.nan,
-            "Concentration": np.nan
+            "AUC IF": auc_if
         })
 
     df = pd.DataFrame(rows).sort_values("Time")
 
-    # ✅ TABLE
-    st.subheader("Dataset Table")
     st.dataframe(df, use_container_width=True)
 
-    # ✅ SPECTRA OVERLAY
+    # ✅ Spectra overlay
     st.subheader("Spectra Overlay")
     fig_spec = go.Figure()
-
     for name, d in data.items():
         if ex_toggle in d["spectra"]:
             fig_spec.add_trace(go.Scatter(
@@ -148,24 +144,50 @@ if page == "APIES Dashboard":
                 y=d["spectra"][ex_toggle],
                 name=name
             ))
-
     st.plotly_chart(fig_spec, use_container_width=True)
+
+    # =====================
+    # ✅ APIES MULTI-AXIS + REGRESSION
+    # =====================
+    st.subheader("APIES Metrics with Regression")
 
     x_vals = df["Time"].fillna(df["Index"])
 
-    # ✅ MAIN DASHBOARD
-    st.subheader("APIES Metrics")
-
     fig = go.Figure()
 
+    y_irif = df["IR/IF (AUC)"].values
+
+    # ✅ regression
+    if len(df) > 1:
+        x_num = np.arange(len(df))
+        coeffs = np.polyfit(x_num, y_irif, 1)
+        fit = np.polyval(coeffs, x_num)
+
+        ss_res = np.sum((y_irif - fit)**2)
+        ss_tot = np.sum((y_irif - np.mean(y_irif))**2)
+        r2 = 1 - ss_res/ss_tot if ss_tot != 0 else np.nan
+    else:
+        fit = y_irif
+        r2 = np.nan
+
+    # ✅ primary axis
     fig.add_trace(go.Scatter(
         x=x_vals,
-        y=df["IR/IF (AUC)"],
-        name="IR/IF",
+        y=y_irif,
+        name=f"IR/IF (AUC) R²={r2:.3f}",
         mode="lines+markers",
         yaxis="y1"
     ))
 
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=fit,
+        name="Fit",
+        line=dict(dash="dash"),
+        yaxis="y1"
+    ))
+
+    # ✅ secondary axis
     fig.add_trace(go.Scatter(
         x=x_vals,
         y=df["I350/I330"],
@@ -176,7 +198,7 @@ if page == "APIES Dashboard":
 
     fig.update_layout(
         xaxis_title="Time / Sample",
-        yaxis=dict(title="IR/IF", side="left"),
+        yaxis=dict(title="IR/IF (AUC)", side="left"),
         yaxis2=dict(title="I350/I330", overlaying='y', side='right'),
         template="plotly_white"
     )
@@ -202,16 +224,10 @@ if page == "APIES Dashboard":
         mode="lines+markers"
     ))
 
-    fig_auc.update_layout(
-        xaxis_title="Time / Sample",
-        yaxis_title="AUC",
-        template="plotly_white"
-    )
-
     st.plotly_chart(fig_auc, use_container_width=True)
 
 # =====================
-# ✅ AUC ANALYSIS
+# ✅ AUC ANALYSIS (FIXED)
 # =====================
 if page == "AUC Analysis":
 
@@ -248,12 +264,13 @@ if page == "AUC Analysis":
     st.plotly_chart(fig)
     st.metric("AUC", f"{area:.3f}")
 
-    # ✅ CLEAN BATCH TIME SERIES
+    # ✅ BATCH
     if st.button("Calculate AUC for All Datasets"):
 
         results = []
 
         for name, dataset in data.items():
+
             if ex_toggle not in dataset["spectra"]:
                 continue
 
@@ -267,17 +284,19 @@ if page == "AUC Analysis":
             auc_val = np.trapezoid(y_f[mask], wl_f[mask])
 
             t = extract_time(name)
+
             if pd.isna(t):
                 continue
 
             results.append({"time": t, "AUC": auc_val})
 
-        df_auc = (
-            pd.DataFrame(results)
-            .groupby("time", as_index=False)
-            .mean()
-            .sort_values("time")
-        )
+        df_auc = pd.DataFrame(results)
+
+        if df_auc.empty:
+            st.warning("No valid time data")
+            st.stop()
+
+        df_auc = df_auc.groupby("time", as_index=False).mean().sort_values("time")
 
         st.dataframe(df_auc)
 
