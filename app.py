@@ -217,20 +217,20 @@ else:
     irif = y[nearest(280)] / y[nearest(340)] if y[nearest(340)] != 0 else np.nan
     pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
 
-    rows.append({
-        "File": name,
-        "Index": i,
-        "IR/IF (AUC)": irif,
-        "AUC IR": auc_ir,
-        "AUC IF": auc_if,
-        "I350/I330": pie,
-        "Aggregation Index": np.nan,
-        "Concentration (mg/mL)": np.nan,
-        "IR (nm)": ir_peak,
-        "IR Peak Intensity": ir_int,
-        "IF (nm)": if_peak,
-        "IF Peak Intensity": if_int
-    })
+   rows.append({
+    "File": name,
+    "Index": i,
+    "IR/IF (AUC)": irif,
+    "I350/I330": pie,
+    "AUC IR": auc_ir,
+    "AUC IF": auc_if,
+    "Aggregation Index": np.nan,
+    "Concentration (mg/mL)": np.nan,
+    "IR (nm)": ir_peak,
+    "IR Peak Intensity": ir_int,
+    "IF (nm)": if_peak,
+    "IF Peak Intensity": if_int
+})
 
     df = pd.DataFrame(rows)
 
