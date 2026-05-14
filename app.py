@@ -410,8 +410,8 @@ if page == "AUC Analysis":
         st.write("Available excitation keys:", list(d['spectra'].keys()))
     else:
 
-    wl = d['wavelengths']
-    y = d['spectra'][ex_toggle]
+        wl = d['wavelengths']
+        y = d['spectra'][ex_toggle]
 
     if len(wl) == 0:
         st.warning("No wavelength data available.")
