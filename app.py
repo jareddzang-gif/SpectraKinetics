@@ -209,6 +209,7 @@ for i, (name, d) in enumerate(data.items()):
     rows.append({
         "File": name,
         "Index": i,
+        "IR/IF": irif,
         "IR/IF (AUC)": irif,
         "AUC IR": auc_ir,
         "AUC IF": auc_if,
