@@ -253,7 +253,12 @@ for i, (name, d) in enumerate(data.items()):
             template="plotly_white"
         )
 
-        st.plotly_chart(fig, use_container_width=True, key=f"spectra_{ex_toggle}")
+       st.plotly_chart(
+    fig,
+    use_container_width=True,
+    key=f"spectra_{ex_toggle}_{len(fig.data)}"
+)
+
 
     # =====================
     # ✅ APIES
