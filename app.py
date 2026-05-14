@@ -105,8 +105,7 @@ with col2:
 ir_start, ir_end = sorted([ir_start, ir_end])
 if_start, if_end = sorted([if_start, if_end])
     
-
-    for i,(name,d) in enumerate(data.items()):
+ for i,(name,d) in enumerate(data.items()):
         if 280 not in d['spectra']: continue
 
         wl = d['wavelengths']
