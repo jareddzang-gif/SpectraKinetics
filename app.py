@@ -387,11 +387,9 @@ if page == "Kinetics":
 
         st.plotly_chart(fig_auc, use_container_width=True, key="auc_plot")
 
+
 # =====================
-# ✅ AUC ANALYSIS (FINAL CLEAN VERSION)
-# =====================
-# =====================
-# ✅ AUC ANALYSIS (FINAL STABLE FIX)
+# ✅ AUC ANALYSIS 
 # =====================
 if page == "AUC Analysis":
 
@@ -408,8 +406,9 @@ if page == "AUC Analysis":
 
     # ---- VALIDATION ----
     if ex_toggle not in d['spectra']:
-        st.warning("Selected excitation not available.")
-        st.stop()
+        st.warning("Selected excitation not available for this dataset.")
+        st.write("Available excitation keys:", list(d['spectra'].keys()))
+    else:
 
     wl = d['wavelengths']
     y = d['spectra'][ex_toggle]
@@ -465,14 +464,19 @@ if page == "AUC Analysis":
     # =====================
     # ✅ VISUALIZATION
     # =====================
-    fig = go.Figure()
+   fig = go.Figure()
 
-    fig.add_trace(go.Scatter(
-        x=wl,
-        y=y,
-        name="Full Spectrum",
-        line=dict(color='black')
-    ))
+# ✅ Always plot spectrum
+fig.add_trace(go.Scatter(
+    x=wl,
+    y=y,
+    name="Full Spectrum",
+    line=dict(color='black')
+))
+
+# ✅ Only overlay AUC if valid
+if 'start_wl' in locals() and 'end_wl' in locals():
+    mask = (wl >= start_wl) & (wl <= end_wl)
 
     if np.any(mask):
         fig.add_trace(go.Scatter(
@@ -483,12 +487,15 @@ if page == "AUC Analysis":
             line=dict(color='orange')
         ))
 
-    fig.update_layout(
-        title=f"AUC Selection ({start_wl:.1f}–{end_wl:.1f} nm)",
-        xaxis_title="Wavelength (nm)",
-        yaxis_title="Intensity",
-        template="plotly_white"
-    )
+fig.update_layout(
+    title="Spectrum",
+    xaxis_title="Wavelength (nm)",
+    yaxis_title="Intensity",
+    template="plotly_white"
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
 
     st.plotly_chart(fig, use_container_width=True, key="auc_single_plot")
 
