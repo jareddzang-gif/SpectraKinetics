@@ -105,7 +105,19 @@ if page == "APIES Dashboard":
         irif_auc = auc_ir / auc_if if auc_if != 0 else np.nan
         i350_i330 = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
 
-        t = pd.to_datetime(name.split("_")[0], errors='coerce')
+        # ✅ FIXED timestamp parsing for your filename format
+match = re.search(
+    r"(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})_(\d{2})",
+    name
+)
+
+if match:
+    t = pd.to_datetime(
+        f"{match.group(1)}-{match.group(2)}-{match.group(3)} "
+        f"{match.group(4)}:{match.group(5)}:{match.group(6)}"
+    )
+else:
+    t = pd.NaT
 
         rows.append({
             "File": name,
