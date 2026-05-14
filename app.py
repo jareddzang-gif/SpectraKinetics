@@ -161,45 +161,20 @@ if page == "Spectra Analysis":
     # =====================
     rows = []
 
-    for i, (name, d) in enumerate(data.items()):
+for i, (name, d) in enumerate(data.items()):
 
-        if 280 not in d['spectra']:
-            continue
+    if 280 not in d['spectra']:
+        continue
 
-        wl = d['wavelengths']
-        y = d['spectra'][280]
+    wl = d['wavelengths']
+    y = d['spectra'][280]
 
-        # =====================
-# ✅ AUC IR / IF CALCULATION
-# =====================
-
-# ---- IR AUC ----
-mask_ir = (wl >= ir_start) & (wl <= ir_end)
-
-if np.any(mask_ir):
-    auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir])
-else:
-    auc_ir = np.nan
-
-# ---- IF AUC ----
-mask_if_auc = (wl >= if_start) & (wl <= if_end)
-
-if np.any(mask_if_auc):
-    auc_if = np.trapezoid(y[mask_if_auc], wl[mask_if_auc])
-else:
-    auc_if = np.nan
-
-# ---- AUC-based IR/IF ratio ----
-if not np.isnan(auc_if) and auc_if != 0:
-    irif = auc_ir / auc_if
-else:
-    irif = np.nan
-
-        
+    # ---- IR peak ----
     ir_idx = np.argmax(y)
     ir_peak = wl[ir_idx]
     ir_int = y[ir_idx]
 
+    # ---- IF peak ----
     mask = (wl >= 300) & (wl <= 390)
 
     if np.any(mask):
@@ -212,25 +187,40 @@ else:
         if_peak = np.nan
         if_int = np.nan
 
-    nearest = lambda v: np.argmin(np.abs(wl - v))
+    # =====================
+    # ✅ AUC CALCULATIONS (CORRECTLY INDENTED)
+    # =====================
 
-    irif = y[nearest(280)] / y[nearest(340)] if y[nearest(340)] != 0 else np.nan
+    # IR AUC
+    mask_ir = (wl >= ir_start) & (wl <= ir_end)
+    auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir]) if np.any(mask_ir) else np.nan
+
+    # IF AUC
+    mask_if_auc = (wl >= if_start) & (wl <= if_end)
+    auc_if = np.trapezoid(y[mask_if_auc], wl[mask_if_auc]) if np.any(mask_if_auc) else np.nan
+
+    # AUC ratio
+    irif = auc_ir / auc_if if (not np.isnan(auc_if) and auc_if != 0) else np.nan
+
+    # ---- old point ratio (still kept)
+    nearest = lambda v: np.argmin(np.abs(wl - v))
     pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
 
-   rows.append({
-    "File": name,
-    "Index": i,
-    "IR/IF (AUC)": irif,
-    "I350/I330": pie,
-    "AUC IR": auc_ir,
-    "AUC IF": auc_if,
-    "Aggregation Index": np.nan,
-    "Concentration (mg/mL)": np.nan,
-    "IR (nm)": ir_peak,
-    "IR Peak Intensity": ir_int,
-    "IF (nm)": if_peak,
-    "IF Peak Intensity": if_int
-})
+    rows.append({
+        "File": name,
+        "Index": i,
+        "IR/IF (AUC)": irif,
+        "AUC IR": auc_ir,
+        "AUC IF": auc_if,
+        "I350/I330": pie,
+        "Aggregation Index": np.nan,
+        "Concentration (mg/mL)": np.nan,
+        "IR (nm)": ir_peak,
+        "IR Peak Intensity": ir_int,
+        "IF (nm)": if_peak,
+        "IF Peak Intensity": if_int
+    })
+
 
     df = pd.DataFrame(rows)
 
