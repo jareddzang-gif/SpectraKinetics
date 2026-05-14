@@ -1,8 +1,6 @@
-# v11.7 FULL RESTORE + AUC FIX
-# Restores FULL Spectra + Kinetics pages (from working versions)
-# Keeps AUC (fixed with np.trapezoid)
+# v10, 14 May 2026
 # =====================
-# SPECTRA (FIXED)
+# SPECTRA 
 # =====================
 
 # =====================
@@ -20,7 +18,7 @@ import io, zipfile, re
 st.set_page_config(page_title='SpectraKinetics v11.7', layout='wide')
 
 # =====================
-# PAGE SELECTOR (MUST COME EARLY)
+# PAGE SELECTOR
 # =====================
 page = st.sidebar.radio(
     "Navigation",
@@ -203,8 +201,41 @@ if page == "Spectra Analysis":
             "IF Peak Intensity": if_int
         })
 
-    df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True)
+  # =====================
+# TABLE (UPGRADED)
+# =====================
+df = pd.DataFrame(rows)
+
+# ✅ convert filenames → datetime for ordering
+try:
+    df["Sample #"] = pd.to_datetime(df["File"], format="%Y-%m-%d-%H-%M-%S")
+    df = df.sort_values("Sample #").reset_index(drop=True)
+    df["Sample #"] = range(1, len(df) + 1)  # clean numbering
+except:
+    df["Sample #"] = df.index + 1
+
+# ✅ move Sample # to front
+cols = ["Sample #"] + [c for c in df.columns if c not in ["Sample #", "Index"]]
+df = df[cols]
+
+# ✅ removable: drop old Index if present
+if "Index" in df.columns:
+    df = df.drop(columns=["Index"])
+
+# ✅ COPY-PASTE FRIENDLY DISPLAY
+st.subheader("Spectra Data Table (copyable)")
+
+st.dataframe(df, use_container_width=True)
+
+# ✅ ALSO PROVIDE TEXT COPY OPTION
+csv = df.to_csv(index=False)
+st.download_button(
+    "Download Table (CSV)",
+    csv,
+    file_name="spectra_analysis.csv",
+    mime="text/csv"
+)
+
 
     # ✅ Spectra plot
     fig = go.Figure()
