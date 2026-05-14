@@ -196,41 +196,41 @@ else:
     irif = np.nan
 
         
-        ir_idx = np.argmax(y)
-        ir_peak = wl[ir_idx]
-        ir_int = y[ir_idx]
+    ir_idx = np.argmax(y)
+    ir_peak = wl[ir_idx]
+    ir_int = y[ir_idx]
 
-        mask = (wl >= 300) & (wl <= 390)
+    mask = (wl >= 300) & (wl <= 390)
 
-        if np.any(mask):
-            y_if = y[mask]
-            wl_if = wl[mask]
-            idx = np.argmax(y_if)
-            if_peak = wl_if[idx]
-            if_int = y_if[idx]
-        else:
-            if_peak = np.nan
-            if_int = np.nan
+    if np.any(mask):
+        y_if = y[mask]
+        wl_if = wl[mask]
+        idx = np.argmax(y_if)
+        if_peak = wl_if[idx]
+        if_int = y_if[idx]
+    else:
+        if_peak = np.nan
+        if_int = np.nan
 
-        nearest = lambda v: np.argmin(np.abs(wl - v))
+    nearest = lambda v: np.argmin(np.abs(wl - v))
 
-        irif = y[nearest(280)] / y[nearest(340)] if y[nearest(340)] != 0 else np.nan
-        pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
+    irif = y[nearest(280)] / y[nearest(340)] if y[nearest(340)] != 0 else np.nan
+    pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
 
-        rows.append({
-            "File": name,
-            "Index": i,
-            "IR/IF (AUC)": irif,
-            "AUC IR": auc_ir,
-            "AUC IF": auc_if,
-            "I350/I330": pie,
-            "Aggregation Index": np.nan,
-            "Concentration (mg/mL)": np.nan,
-            "IR (nm)": ir_peak,
-            "IR Peak Intensity": ir_int,
-            "IF (nm)": if_peak,
-            "IF Peak Intensity": if_int
-        })
+    rows.append({
+        "File": name,
+        "Index": i,
+        "IR/IF (AUC)": irif,
+        "AUC IR": auc_ir,
+        "AUC IF": auc_if,
+        "I350/I330": pie,
+        "Aggregation Index": np.nan,
+        "Concentration (mg/mL)": np.nan,
+        "IR (nm)": ir_peak,
+        "IR Peak Intensity": ir_int,
+        "IF (nm)": if_peak,
+        "IF Peak Intensity": if_int
+    })
 
     df = pd.DataFrame(rows)
 
