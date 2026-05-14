@@ -448,8 +448,15 @@ if page == "AUC Analysis":
     start_wl, end_wl = sorted([float(start_wl), float(end_wl)])
 
 # =====================
-# ✅ SINGLE DATASET AUC + VISUALIZATION (FIXED)
+# ✅ SINGLE DATASET AUC + VISUALIZATION (CORRECT ORDER)
 # =====================
+
+# ✅ Ensure inputs ALWAYS exist before use
+start_wl = float(start_wl)
+end_wl = float(end_wl)
+start_wl, end_wl = sorted([start_wl, end_wl])
+
+# ✅ Now safe to calculate
 mask = (wl >= start_wl) & (wl <= end_wl)
 
 if np.any(mask):
@@ -457,10 +464,9 @@ if np.any(mask):
 else:
     area = 0
 
-# ✅ FULL SPECTRUM PLOT WITH HIGHLIGHTED REGION
+# ✅ Plot full spectrum + selected region
 fig = go.Figure()
 
-# Full spectrum
 fig.add_trace(go.Scatter(
     x=wl,
     y=y,
@@ -468,7 +474,6 @@ fig.add_trace(go.Scatter(
     line=dict(color='black')
 ))
 
-# AUC region overlay
 if np.any(mask):
     fig.add_trace(go.Scatter(
         x=wl[mask],
@@ -485,12 +490,12 @@ fig.update_layout(
     template="plotly_white"
 )
 
-st.plotly_chart(fig, use_container_width=True, key="auc_single")
+st.plotly_chart(fig, use_container_width=True, key="auc_single_plot")
 
-# ✅ OUTPUT
+# ✅ Outputs
 st.metric("AUC", f"{area:.3f}")
 st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
-
+``
     # =====================
     # ✅ BATCH AUC
     # =====================
