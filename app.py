@@ -5,7 +5,15 @@
 # SPECTRA (FIXED)
 # =====================
 # imports
-import ...
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import io, zipfile, re
+
+st.set_page_config(page_title='SpectraKinetics v11.7', layout='wide')
+
+page = st.sidebar.radio("Navigation", ["Spectra Analysis", "Kinetics", "AUC Analysis"])
 
 # config
 st.set_page_config(...)
