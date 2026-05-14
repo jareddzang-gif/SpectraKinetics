@@ -563,36 +563,36 @@ if not np.any(mask):
 area = np.trapezoid(y[mask], wl[mask])
 
     # ---- PLOT ----
-    fig = go.Figure()
+fig = go.Figure()
 
-    fig.add_trace(go.Scatter(
-        x=wl,
-        y=y,
-        name='Full Spectrum',
-        line=dict(color='black')
-    ))
+fig.add_trace(go.Scatter(
+    x=wl,
+    y=y,
+    name='Full Spectrum',
+    line=dict(color='black')
+))
 
-    fig.add_trace(go.Scatter(
-        x=wl[mask],
-        y=y[mask],
-        name='Selected Region',
-        fill='tozeroy',
-        line=dict(color='orange')
-    ))
+fig.add_trace(go.Scatter(
+    x=wl[mask],
+    y=y[mask],
+    name='Selected Region',
+    fill='tozeroy',
+    line=dict(color='orange')
+))
 
-    fig.update_layout(
-        title="AUC Selection",
-        xaxis_title="Wavelength (nm)",
-        yaxis_title="Intensity",
-        template='plotly_white'
-    )
+fig.update_layout(
+    title="AUC Selection",
+    xaxis_title="Wavelength (nm)",
+    yaxis_title="Intensity",
+    template='plotly_white'
+)
 
-    st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True)
 
     # ---- OUTPUT ----
-    st.subheader("AUC Result")
-    st.metric("Area Under Curve", f"{area:.3f}")
-    st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
+st.subheader("AUC Result")
+st.metric("Area Under Curve", f"{area:.3f}")
+st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
 
 st.markdown("---")
 
