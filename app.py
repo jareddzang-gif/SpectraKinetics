@@ -252,28 +252,84 @@ if page == "Spectra Analysis":
             key=f"spectra_overlay_{uuid.uuid4()}"
         )
 
-    # =====================
-    # ✅ APIES
-    # =====================
-    st.header("APIES (All Metrics Overlay)")
+   # =====================
+# ✅ APIES WITH REGRESSION
+# =====================
+st.header("APIES (All Metrics Overlay)")
 
-    fig2 = go.Figure()
+fig2 = go.Figure()
+
+# ---- X axis (sample order) ----
+x_vals = df['Index'].values
+
+# =====================
+# ✅ IR/IF (AUC)
+# =====================
+y_irif = df['IR/IF'].values
+
+if len(x_vals) > 1 and not np.all(np.isnan(y_irif)):
+    coeffs = np.polyfit(x_vals, y_irif, 1)
+    fit_irif = np.polyval(coeffs, x_vals)
+
+    ss_res = np.sum((y_irif - fit_irif) ** 2)
+    ss_tot = np.sum((y_irif - np.mean(y_irif)) ** 2)
+    r2_irif = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
 
     fig2.add_trace(go.Scatter(
-        x=df['Index'],
-        y=df['IR/IF'],
-        name='IR/IF (AUC)',
-        mode='lines+markers'
+        x=x_vals,
+        y=y_irif,
+        mode='lines+markers',
+        name=f'IR/IF (R²={r2_irif:.3f})'
     ))
 
     fig2.add_trace(go.Scatter(
-        x=df['Index'],
-        y=df['I350/I330'],
-        name='I350/I330',
-        mode='lines+markers'
+        x=x_vals,
+        y=fit_irif,
+        mode='lines',
+        name='IR/IF Fit',
+        line=dict(dash='dash')
     ))
 
-    st.plotly_chart(fig2, use_container_width=True, key="apies_plot")
+# =====================
+# ✅ I350/I330
+# =====================
+y_pie = df['I350/I330'].values
+
+if len(x_vals) > 1 and not np.all(np.isnan(y_pie)):
+    coeffs = np.polyfit(x_vals, y_pie, 1)
+    fit_pie = np.polyval(coeffs, x_vals)
+
+    ss_res = np.sum((y_pie - fit_pie) ** 2)
+    ss_tot = np.sum((y_pie - np.mean(y_pie)) ** 2)
+    r2_pie = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
+
+    fig2.add_trace(go.Scatter(
+        x=x_vals,
+        y=y_pie,
+        mode='lines+markers',
+        name=f'I350/I330 (R²={r2_pie:.3f})'
+    ))
+
+    fig2.add_trace(go.Scatter(
+        x=x_vals,
+        y=fit_pie,
+        mode='lines',
+        name='I350/I330 Fit',
+        line=dict(dash='dash')
+    ))
+
+# =====================
+# ✅ FINAL PLOT
+# =====================
+fig2.update_layout(
+    title="APIES with Linear Regression",
+    xaxis_title="Sample Index",
+    yaxis_title="Metric Value",
+    template="plotly_white"
+)
+
+st.plotly_chart(fig2, use_container_width=True, key="apies_regression")
+
 
 
 # =====================
