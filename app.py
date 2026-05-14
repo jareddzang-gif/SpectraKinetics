@@ -4,6 +4,32 @@
 # =====================
 # SPECTRA (FIXED)
 # =====================
+# imports
+import ...
+
+# config
+st.set_page_config(...)
+
+# ✅ page selector
+page = st.sidebar.radio(...)
+
+# functions (clean_filename, parse_file)
+def ...
+
+# upload logic
+files = ...
+data = ...
+
+# ✅ THEN pages
+if page == "Spectra Analysis":
+    ...
+
+if page == "Kinetics":
+    ...
+
+if page == "AUC Analysis":
+    ...
+
 if page == "Spectra Analysis":
 
     st.title("Spectra Analysis")
