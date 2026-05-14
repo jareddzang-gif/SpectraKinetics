@@ -437,7 +437,6 @@ with col2:
 
 # ✅ CRITICAL: THIS MUST BE AFTER INPUTS (INDENTED AT SAME LEVEL)
 start_wl, end_wl = sorted([float(start_wl), float(end_wl)])
-``
         st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch_plot")
 
         st.subheader("AUC Results")
