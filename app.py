@@ -393,7 +393,10 @@ if page == "AUC Analysis":
 # =====================
 st.markdown("---")
 
-run_batch = st.button("Calculate AUC for All Datasets")
+run_batch = st.button(
+    "Calculate AUC for All Datasets",
+    key="auc_batch_button"
+)
 
 # ✅ Only run if inputs exist (CRITICAL FIX)
 if run_batch:
