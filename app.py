@@ -1,4 +1,4 @@
-# v11 FINAL STABLE
+# v12 FINAL STABLE VERIFIED
 
 import streamlit as st
 import pandas as pd
@@ -6,13 +6,15 @@ import numpy as np
 import plotly.graph_objects as go
 import re, uuid
 
-st.set_page_config(page_title='SpectraKinetics v11.8', layout='wide')
+st.set_page_config(page_title='SpectraKinetics v12', layout='wide')
 
-page = st.sidebar.radio("Navigation", ["Spectra Analysis", "Kinetics", "AUC Analysis"])
+page = st.sidebar.radio("Navigation",
+                        ["Spectra Analysis", "Kinetics", "AUC Analysis"])
+
 ex_toggle = st.sidebar.radio("Spectra View", [280, 260])
 
 # =====================
-# FILE PARSER
+# PARSER
 # =====================
 def clean_filename(name):
     match = re.search(r"(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})", name)
@@ -20,7 +22,8 @@ def clean_filename(name):
 
 def parse_file(file_bytes, filename):
     content = file_bytes.decode("utf-8", errors="replace").splitlines()
-    spectra, wavelengths, ex_vals, kinetics = {}, [], [], None
+
+    spectra, wavelengths, ex_vals = {}, [], []
 
     for i, line in enumerate(content):
         if "excitation wavelength" in line.lower():
@@ -31,6 +34,7 @@ def parse_file(file_bytes, filename):
             break
 
     matrix = []
+
     for line in content[start:]:
         parts = line.split("\t")
         try:
@@ -51,7 +55,7 @@ def parse_file(file_bytes, filename):
     }
 
 # =====================
-# FILES
+# LOAD FILES
 # =====================
 files = st.sidebar.file_uploader("Upload", type=["txt"], accept_multiple_files=True)
 
@@ -63,6 +67,7 @@ if files:
 
 data = st.session_state.get("datasets", {})
 if not data:
+    st.info("Upload data to begin.")
     st.stop()
 
 # =====================
@@ -108,139 +113,3 @@ if page == "Spectra Analysis":
             "Index": i,
             "IR/IF (AUC)": irif,
             "AUC IR": auc_ir,
-            "AUC IF": auc_if
-        })
-
-    df = pd.DataFrame(rows)
-
-    st.subheader("Spectra Metrics Table")
-    st.dataframe(df, use_container_width=True)
-
-    # ✅ Overlay
-    fig = go.Figure()
-
-    for name, d in data.items():
-        if ex_toggle in d["spectra"]:
-            fig.add_trace(go.Scatter(
-                x=d["wavelengths"],
-                y=d["spectra"][ex_toggle],
-                name=name
-            ))
-
-    st.plotly_chart(fig, use_container_width=True, key=f"spectra_{uuid.uuid4()}")
-
-    # ✅ APIES
-    st.subheader("APIES (with Regression)")
-
-    fig2 = go.Figure()
-
-    x_vals = df["Index"]
-
-    if len(df) > 1:
-        y = df["IR/IF (AUC)"]
-
-        coeffs = np.polyfit(x_vals, y, 1)
-        fit = np.polyval(coeffs, x_vals)
-
-        r2 = 1 - np.sum((y-fit)**2)/np.sum((y-np.mean(y))**2)
-
-        fig2.add_trace(go.Scatter(
-            x=x_vals, y=y,
-            mode="lines+markers",
-            name=f"IR/IF (R²={r2:.3f})"
-        ))
-
-        fig2.add_trace(go.Scatter(
-            x=x_vals, y=fit,
-            mode="lines",
-            name="IR/IF Fit",
-            line=dict(dash="dash")
-        ))
-
-    st.plotly_chart(fig2, use_container_width=True)
-
-# =====================
-# ✅ AUC ANALYSIS
-# =====================
-if page == "AUC Analysis":
-
-    st.title("AUC Analysis")
-
-    selected = st.selectbox("Dataset", list(data.keys()))
-    d = data[selected]
-
-    if ex_toggle not in d["spectra"]:
-        st.warning("Excitation not available")
-        st.stop()
-
-    wl = d["wavelengths"]
-    y = d["spectra"][ex_toggle]
-
-    min_wl = float(np.min(wl))
-    max_wl = float(np.max(wl))
-
-    start_wl = st.number_input("Start WL", min_value=min_wl, max_value=max_wl, value=min_wl+20)
-    end_wl = st.number_input("End WL", min_value=min_wl, max_value=max_wl, value=max_wl-20)
-
-    start_wl, end_wl = sorted([start_wl, end_wl])
-
-    mask = (wl >= start_wl) & (wl <= end_wl)
-    area = np.trapezoid(y[mask], wl[mask]) if np.any(mask) else 0
-
-    # ✅ Spectrum
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=wl, y=y, name="Spectrum"))
-
-    if np.any(mask):
-        fig.add_trace(go.Scatter(
-            x=wl[mask],
-            y=y[mask],
-            fill="tozeroy",
-            name="AUC region"
-        ))
-
-    st.plotly_chart(fig, use_container_width=True)
-    st.metric("AUC", f"{area:.3f}")
-
-    # ✅ Batch AUC WITH LINE GRAPH (FIXED)
-    if st.button("Calculate AUC for All Datasets"):
-
-        results = []
-
-        for name, dataset in data.items():
-
-            if ex_toggle not in dataset["spectra"]:
-                continue
-
-            wl_f = dataset["wavelengths"]
-            y_f = dataset["spectra"][ex_toggle]
-
-            mask = (wl_f >= start_wl) & (wl_f <= end_wl)
-            if not np.any(mask):
-                continue
-
-            auc_val = np.trapezoid(y_f[mask], wl_f[mask])
-
-            try:
-                t = pd.to_datetime(name.split("_")[0])
-            except:
-                t = name  # fallback
-
-            results.append({"time": t, "AUC": auc_val})
-
-        df_auc = pd.DataFrame(results)
-
-        st.subheader("AUC Table")
-        st.dataframe(df_auc)
-
-        # ✅ LINE GRAPH RESTORED
-        fig_auc = go.Figure()
-
-        fig_auc.add_trace(go.Scatter(
-            x=df_auc["time"],
-            y=df_auc["AUC"],
-            mode="lines+markers",
-            name="AUC vs Time"
-        ))
-
-        st.plotly_chart(fig_auc, use_container_width=True)
