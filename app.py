@@ -447,31 +447,49 @@ if page == "AUC Analysis":
     # ✅ ensure correct ordering
     start_wl, end_wl = sorted([float(start_wl), float(end_wl)])
 
-    # =====================
-    # ✅ SINGLE DATASET AUC
-    # =====================
-    mask = (wl >= start_wl) & (wl <= end_wl)
+# =====================
+# ✅ SINGLE DATASET AUC + VISUALIZATION (FIXED)
+# =====================
+mask = (wl >= start_wl) & (wl <= end_wl)
 
-    if np.any(mask):
-        area = np.trapezoid(y[mask], wl[mask])
-    else:
-        area = 0
+if np.any(mask):
+    area = np.trapezoid(y[mask], wl[mask])
+else:
+    area = 0
 
-    fig = go.Figure()
+# ✅ FULL SPECTRUM PLOT WITH HIGHLIGHTED REGION
+fig = go.Figure()
 
-    fig.add_trace(go.Scatter(x=wl, y=y, name="Full Spectrum"))
+# Full spectrum
+fig.add_trace(go.Scatter(
+    x=wl,
+    y=y,
+    name="Full Spectrum",
+    line=dict(color='black')
+))
 
+# AUC region overlay
+if np.any(mask):
     fig.add_trace(go.Scatter(
         x=wl[mask],
         y=y[mask],
         fill='tozeroy',
-        name="Selected Region"
+        name="Selected Region (AUC)",
+        line=dict(color='orange')
     ))
 
-    st.plotly_chart(fig, use_container_width=True, key="auc_single")
+fig.update_layout(
+    title=f"AUC Selection ({start_wl:.1f}–{end_wl:.1f} nm)",
+    xaxis_title="Wavelength (nm)",
+    yaxis_title="Intensity",
+    template="plotly_white"
+)
 
-    st.metric("AUC", f"{area:.3f}")
-    st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
+st.plotly_chart(fig, use_container_width=True, key="auc_single")
+
+# ✅ OUTPUT
+st.metric("AUC", f"{area:.3f}")
+st.info(f"Range: {start_wl:.1f} nm → {end_wl:.1f} nm")
 
     # =====================
     # ✅ BATCH AUC
@@ -557,7 +575,13 @@ if page == "AUC Analysis":
                 template="plotly_white"
             )
 
-            st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch_plot")
+            import uuid
+
+st.plotly_chart(
+    fig_auc,
+    use_container_width=True,
+    key=f"auc_batch_plot_{uuid.uuid4()}"
+)
 
             st.subheader("AUC Results Table")
             st.dataframe(df_auc)
