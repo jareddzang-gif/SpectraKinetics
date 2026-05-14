@@ -125,6 +125,9 @@ data = st.session_state.get('datasets', {})
 if not data:
     st.stop()
 
+# =====================
+# SPECTRA ANALYSIS (FULL FIXED SECTION)
+# =====================
 if page == "Spectra Analysis":
 
     st.title("Spectra Analysis")
@@ -143,138 +146,110 @@ if page == "Spectra Analysis":
         if_start = st.number_input("IF Start", value=320.0)
         if_end = st.number_input("IF End", value=390.0)
 
-    # ✅ safety
     ir_start, ir_end = sorted([ir_start, ir_end])
     if_start, if_end = sorted([if_start, if_end])
 
-rows = []
+    # =====================
+    # TABLE
+    # =====================
+    rows = []
 
-for i, (name, d) in enumerate(data.items()):
+    for i, (name, d) in enumerate(data.items()):
 
-    if 280 not in d['spectra']:
-        continue
+        if 280 not in d['spectra']:
+            continue
 
-    wl = d['wavelengths']
-    y = d['spectra'][280]
+        wl = d['wavelengths']
+        y = d['spectra'][280]
 
-    # ---- IR peak ----
-    ir_idx = np.argmax(y)
-    ir_peak = wl[ir_idx]
-    ir_int = y[ir_idx]
+        ir_idx = np.argmax(y)
+        ir_peak = wl[ir_idx]
+        ir_int = y[ir_idx]
 
-    # ---- IF peak ----
-    mask = (wl >= 300) & (wl <= 390)
-    if np.any(mask):
-        y_if = y[mask]
-        wl_if = wl[mask]
-        idx = np.argmax(y_if)
-        if_peak = wl_if[idx]
-        if_int = y_if[idx]
-    else:
-        if_peak = np.nan
-        if_int = np.nan
+        mask = (wl >= 300) & (wl <= 390)
 
-    # ---- Ratios ----
-    nearest = lambda v: np.argmin(np.abs(wl - v))
+        if np.any(mask):
+            y_if = y[mask]
+            wl_if = wl[mask]
+            idx = np.argmax(y_if)
+            if_peak = wl_if[idx]
+            if_int = y_if[idx]
+        else:
+            if_peak = np.nan
+            if_int = np.nan
 
-    irif = y[nearest(280)] / y[nearest(340)] if y[nearest(340)] != 0 else np.nan
-    pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
+        nearest = lambda v: np.argmin(np.abs(wl - v))
 
-    rows.append({
-        "File": name,
-        "Index": i,
-        "IR/IF": irif,
-        "I350/I330": pie,
-        "Aggregation Index": np.nan,
-        "Concentration (mg/mL)": np.nan,
-        "IR (nm)": ir_peak,
-        "IR Peak Intensity": ir_int,
-        "IF (nm)": if_peak,
-        "IF Peak Intensity": if_int
-    })
+        irif = y[nearest(280)] / y[nearest(340)] if y[nearest(340)] != 0 else np.nan
+        pie = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
 
-df = pd.DataFrame(rows)
+        rows.append({
+            "File": name,
+            "Index": i,
+            "IR/IF": irif,
+            "I350/I330": pie,
+            "Aggregation Index": np.nan,
+            "Concentration (mg/mL)": np.nan,
+            "IR (nm)": ir_peak,
+            "IR Peak Intensity": ir_int,
+            "IF (nm)": if_peak,
+            "IF Peak Intensity": if_int
+        })
 
-st.dataframe(df, use_container_width=True)
+    df = pd.DataFrame(rows)
 
-# =====================
-# ✅ FULL SPECTRA OVERLAY (RESTORED EXACT BEHAVIOR)
-# =====================
-st.header(f"Spectra Overlay (Ex {ex_toggle})")
+    st.dataframe(df, use_container_width=True)
 
-# =====================
-# ✅ FULL SPECTRA OVERLAY (ROBUST VERSION)
-# =====================
-st.header(f"Spectra Overlay (Ex {ex_toggle})")
+    # =====================
+    # ✅ FULL SPECTRA OVERLAY (RESTORED CORRECTLY)
+    # =====================
+    st.header(f"Spectra Overlay (Ex {ex_toggle})")
 
-fig = go.Figure()
+    fig = go.Figure()
 
-for name, d in data.items():
+    for name, d in data.items():
 
-    spectra_dict = d.get('spectra', {})
-    wl = d.get('wavelengths', [])
-
-    # ✅ Skip only truly invalid datasets
-    if len(wl) == 0 or len(spectra_dict) == 0:
-        continue
-
-    # ✅ If selected excitation exists → plot normally
-    if ex_toggle in spectra_dict:
-
-        fig.add_trace(go.Scatter(
-            x=wl,
-            y=spectra_dict[ex_toggle],
-            name=name
-        ))
-
-    else:
-        # ✅ fallback: plot whatever exists (prevents empty graph)
-        for ex, y in spectra_dict.items():
+        if ex_toggle in d['spectra']:
 
             fig.add_trace(go.Scatter(
-                x=wl,
-                y=y,
-                name=f"{name} (Ex {ex})"
+                x=d['wavelengths'],
+                y=d['spectra'][ex_toggle],
+                name=name
             ))
 
-# ✅ safety: if nothing plotted, show message instead of blank
-if len(fig.data) == 0:
-    st.warning("No spectra available to display. Check excitation selection.")
-else:
-    fig.update_layout(
-        xaxis_title="Wavelength (nm)",
-        yaxis_title="Intensity",
-        template="plotly_white"
-    )
+    if len(fig.data) == 0:
+        st.warning("No spectra available for selected excitation.")
+    else:
+        fig.update_layout(
+            xaxis_title="Wavelength (nm)",
+            yaxis_title="Intensity",
+            template="plotly_white"
+        )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-        key=f"spectra_overlay_{ex_toggle}"
-    )
+        st.plotly_chart(fig, use_container_width=True, key=f"spectra_{ex_toggle}")
 
-# =====================
-# ✅ APIES (UNCHANGED WORKING VERSION)
-# =====================
-st.header("APIES (All Metrics Overlay)")
+    # =====================
+    # ✅ APIES
+    # =====================
+    st.header("APIES (All Metrics Overlay)")
 
-fig2 = go.Figure()
+    fig2 = go.Figure()
 
-fig2.add_trace(go.Scatter(
-    x=df['Index'],
-    y=df['IR/IF'],
-    name='IR/IF',
-    mode='lines+markers'
-))
+    fig2.add_trace(go.Scatter(
+        x=df['Index'],
+        y=df['IR/IF'],
+        name='IR/IF',
+        mode='lines+markers'
+    ))
 
-fig2.add_trace(go.Scatter(
-    x=df['Index'],
-    y=df['I350/I330'],
-    name='I350/I330',
-    mode='lines+markers'
-))
+    fig2.add_trace(go.Scatter(
+        x=df['Index'],
+        y=df['I350/I330'],
+        name='I350/I330',
+        mode='lines+markers'
+    ))
 
-st.plotly_chart(fig2, use_container_width=True, key="apies_plot")
+    st.plotly_chart(fig2, use_container_width=True, key="apies_plot")
 
 # =====================
 # KINETICS (RESTORED)
