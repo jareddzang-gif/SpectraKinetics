@@ -238,14 +238,24 @@ st.download_button(
 
 
     # ✅ Spectra plot
-    fig = go.Figure()
-    for name, d in data.items():
-        if ex_toggle in d['spectra']:
-            fig.add_trace(go.Scatter(
-                x=d['wavelengths'],
-                y=d['spectra'][ex_toggle],
-                name=name
-            ))
+fig = go.Figure()
+
+for name, d in data.items():
+    if ex_toggle in d['spectra']:
+        fig.add_trace(go.Scatter(
+            x=d['wavelengths'],
+            y=d['spectra'][ex_toggle],
+            name=name
+        ))
+
+fig.update_layout(
+    title=f"Full Spectra Overlay (Ex {ex_toggle} nm)",
+    xaxis_title="Wavelength (nm)",
+    yaxis_title="Intensity",
+    template="plotly_white"
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
     st.plotly_chart(fig, use_container_width=True)
 
