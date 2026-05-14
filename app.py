@@ -231,7 +231,7 @@ y = d['spectra'][ex_toggle]
 
 # ✅ REQUIRED (this was missing)
 min_wl, max_wl = float(np.min(wl)), float(np.max(wl))
-``
+
     
 if start_wl >= end_wl:
     st.warning("Start wavelength must be less than end wavelength")
