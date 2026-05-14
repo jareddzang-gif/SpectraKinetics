@@ -255,17 +255,15 @@ fig.update_layout(
     template="plotly_white"
 )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True, key="spectra_plot")
 
-st.plotly_chart(fig, use_container_width=True)
-
+st.plotly_chart(fig2, use_container_width=True, key="apies_plot")
 # ✅ APIES
 fig2 = go.Figure()
 fig2.add_trace(go.Scatter(x=df['Index'], y=df['IR/IF'], name='IR/IF'))
 fig2.add_trace(go.Scatter(x=df['Index'], y=df['I350/I330'], name='I350/I330'))
 
-st.plotly_chart(fig2, use_container_width=True)
-
+st.plotly_chart(fig_k, use_container_width=True, key="kinetics_plot")
 
 # =====================
 # KINETICS (RESTORED)
@@ -315,7 +313,7 @@ if page == "Kinetics":
         for t,y in segments_350:
             fig_k.add_trace(go.Scatter(x=t, y=y, name='350 nm'))
 
-        st.plotly_chart(fig_k, use_container_width=True)
+        st.plotly_chart(fig_auc, use_container_width=True, key="auc_plot")
 
 # =====================
 # ✅ AUC (FIXED)
