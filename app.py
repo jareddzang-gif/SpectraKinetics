@@ -545,6 +545,10 @@ if run_batch:
             max_value=max_wl,
             value=float(max_wl - 20)
         )
+# ✅ Ensure variables always exist (CRITICAL FIX)
+start_wl = float(start_wl)
+end_wl = float(end_wl)
+
 
     # ✅ safer handling (NO stop, just fix automatically)
     start_wl, end_wl = sorted([start_wl, end_wl])
