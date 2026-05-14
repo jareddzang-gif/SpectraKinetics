@@ -388,59 +388,71 @@ if page == "AUC Analysis":
     # =====================
     st.markdown("---")
 
-    run_batch = st.button("Calculate AUC for All Datasets")
+# =====================
+# ✅ BATCH AUC (SAFE VERSION)
+# =====================
+st.markdown("---")
 
-    if run_batch:
+run_batch = st.button("Calculate AUC for All Datasets")
 
-        results = []
+# ✅ Only run if inputs exist (CRITICAL FIX)
+if run_batch:
 
-        for name, dataset in data.items():
+    # ✅ Ensure range exists before proceeding
+    if 'start_wl' not in locals() or 'end_wl' not in locals():
+        st.warning("Please define wavelength range first.")
+        st.stop()
 
-            if ex_toggle not in dataset['spectra']:
-                continue
+    results = []
 
-            wl_full = dataset['wavelengths']
-            y_full = dataset['spectra'][ex_toggle]
+    for name, dataset in data.items():
 
-            if len(wl_full) == 0:
-                continue
+        if ex_toggle not in dataset['spectra']:
+            continue
 
-            mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
+        wl_full = dataset['wavelengths']
+        y_full = dataset['spectra'][ex_toggle]
 
-            if not np.any(mask_full):
-                continue
+        if len(wl_full) == 0:
+            continue
 
-            auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
+        mask_full = (wl_full >= start_wl) & (wl_full <= end_wl)
 
-            try:
-                timestamp = pd.to_datetime(name, format="%Y-%m-%d-%H-%M-%S")
-            except:
-                continue
+        if not np.any(mask_full):
+            continue
 
-            results.append({
-                "time": timestamp,
-                "AUC": auc_val,
-                "file": name
-            })
+        auc_val = np.trapezoid(y_full[mask_full], wl_full[mask_full])
 
-        if len(results) == 0:
-            st.warning("No valid datasets.")
-        else:
-            df_auc = pd.DataFrame(results).sort_values("time")
+        try:
+            timestamp = pd.to_datetime(name.split("_")[0], format="%Y-%m-%d-%H-%M-%S")
+        except:
+            continue
 
-            fig_auc = go.Figure()
+        results.append({
+            "time": timestamp,
+            "AUC": auc_val,
+            "file": name
+        })
 
-            fig_auc.add_trace(go.Scatter(
-                x=df_auc["time"],
-                y=df_auc["AUC"],
-                mode="lines+markers",
-                name="AUC over Time"
-            ))
+    if len(results) == 0:
+        st.warning("No valid datasets for AUC calculation.")
+    else:
+        df_auc = pd.DataFrame(results).sort_values("time")
 
-            st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch")
+        fig_auc = go.Figure()
 
-            st.dataframe(df_auc)
-    st.title("AUC Analysis")
+        fig_auc.add_trace(go.Scatter(
+            x=df_auc["time"],
+            y=df_auc["AUC"],
+            mode="lines+markers",
+            name="AUC over Time"
+        ))
+
+        st.plotly_chart(fig_auc, use_container_width=True, key="auc_batch_plot")
+
+        st.subheader("AUC Results Table")
+        st.dataframe(df_auc)
+``
 
     # ---- FILE SELECTION ----
     selected_file = st.selectbox("Dataset", list(data.keys()))
