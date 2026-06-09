@@ -273,8 +273,16 @@ if page == "APIES Dashboard":
         })
 
     
+    
     df = pd.DataFrame(rows)
-    df = df.sort_values(by="Time", na_position="last").reset_index(drop=True)
+
+    if not df.empty and "Time" in df.columns:
+        df = df.sort_values(by="Time", na_position="last").reset_index(drop=True)
+    
+    if df.empty:
+        st.warning("No valid datasets for selected excitation wavelength.")
+        st.stop()
+
 
     st.dataframe(df, use_container_width=True)
 
