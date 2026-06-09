@@ -289,6 +289,7 @@ if page == "APIES Dashboard":
     # ✅ Spectra overlay
     st.subheader("Spectra Overlay")
     fig_spec = go.Figure()
+  
     for name, d in data.items():
         if ex_toggle in d["spectra"]:
             fig_spec.add_trace(go.Scatter(
