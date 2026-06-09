@@ -144,6 +144,12 @@ if page == "APIES Dashboard":
                 y=d["spectra"][ex_toggle],
                 name=name
             ))
+    fig_spec.update_layout(
+        xaxis_title="Emission Wavelength (nm)",
+        yaxis_title="Fluorescence Intensity (Counts/µA)",
+        template="plotly_white"
+    )
+    
     st.plotly_chart(fig_spec, use_container_width=True)
 
     # =====================
