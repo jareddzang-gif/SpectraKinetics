@@ -1,4 +1,4 @@
-# v17 FINAL STABLE (APIES + REGRESSION + CLEAN AUC)
+  # v17 FINAL STABLE (APIES + REGRESSION + CLEAN AUC)
 
 import streamlit as st
 import pandas as pd
@@ -10,8 +10,6 @@ st.set_page_config(page_title='SpectraKinetics v17', layout='wide')
 
 page = st.sidebar.radio("Navigation",
                         ["APIES Dashboard", "AUC Analysis"])
-
-ex_toggle = st.sidebar.radio("Excitation Wavelength (nm)", [280, 260])
 
 # =====================
 # ✅ TIMESTAMP EXTRACTION (YOUR FORMAT)
@@ -93,40 +91,71 @@ def parse_file(file_bytes, filename):
             "filename": filename
         }
 
-    # ---------- CASE 2: COLUMN HEADER FORMAT (IFEPEM) ----------
+
+    # ---------- CASE 2: ROBUST IFEPEM FORMAT ----------
     header = re.split(r"\s+|\t+", content[0].strip())
 
+    # ✅ extract ONLY numeric excitation values
     ex_vals = []
-    for val in header[1:]:
+    for val in header:
         try:
             ex_vals.append(float(val))
         except:
             continue
 
     if len(ex_vals) > 0:
+
         wavelengths, matrix = [], []
 
-        for line in content[2:]:  # skip header + unit row
+    # ✅ find first numeric data row (skip "nm" or junk rows)
+        start_idx = 1
+        while start_idx < len(content):
+            parts = re.split(r"\s+|\t+", content[start_idx].strip())
+            try:
+                float(parts[0])
+                break
+            except:
+                start_idx += 1
+
+        for line in content[start_idx:]:
             parts = re.split(r"\s+|\t+", line.strip())
+
             if len(parts) < len(ex_vals) + 1:
                 continue
+
             try:
                 wavelengths.append(float(parts[0]))
-                matrix.append([float(x) for x in parts[1:1+len(ex_vals)]])
+
+            # ✅ ensure correct column alignment
+                row = []
+                for i in range(len(ex_vals)):
+                    row.append(float(parts[i+1]))
+
+                matrix.append(row)
+
             except:
                 continue
 
+        wavelengths = np.array(wavelengths)
         matrix = np.array(matrix)
+
+    # ✅ FIX: sort excitation values ascending
+        ex_vals = np.array(ex_vals)
+        sort_idx = np.argsort(ex_vals)
+
+        ex_vals = ex_vals[sort_idx]
+        matrix = matrix[:, sort_idx]
 
         spectra = {}
         for j, ex in enumerate(ex_vals):
             spectra[ex] = matrix[:, j]
-
+    
         return {
-            "wavelengths": np.array(wavelengths),
+            "wavelengths": wavelengths,
             "spectra": spectra,
             "filename": filename
         }
+
 
     # ---------- FALLBACK ----------
     return {
@@ -143,6 +172,11 @@ def apply_ife_correction(pem, abs_data):
 
     wl_abs = abs_data["wavelengths"]
     abs_vals = list(abs_data["spectra"].values())[0]
+
+    # ✅ ensure increasing wavelength for interpolation
+    if wl_abs[0] > wl_abs[-1]:
+        wl_abs = wl_abs[::-1]
+        abs_vals = abs_vals[::-1]
 
     corrected = {}
 
@@ -214,6 +248,20 @@ for name, pair in data_raw.items():
 if not data:
     st.info("Upload data to begin.")
     st.stop()
+  
+# ✅ build excitation selector dynamically
+all_ex = sorted({
+    int(round(ex))
+    for d in data.values()
+    for ex in d["spectra"].keys()
+})
+
+
+ex_toggle = st.sidebar.selectbox(
+    "Excitation Wavelength (nm)",
+    all_ex
+)
+
 
 
 # =====================
@@ -239,12 +287,12 @@ if page == "APIES Dashboard":
     rows = []
 
     for i, (name, d) in enumerate(data.items()):
-
-        if ex_toggle not in d["spectra"]:
-            continue
-
         wl = d["wavelengths"]
-        y = d["spectra"][ex_toggle]
+        
+# match nearest excitation (handles float issues)
+        ex_actual = min(d["spectra"].keys(), key=lambda k: abs(k - ex_toggle))
+        y = d["spectra"][ex_actual]
+
 
 
         mask_ir = (wl >= ir_start) & (wl <= ir_end)
@@ -290,13 +338,16 @@ if page == "APIES Dashboard":
     st.subheader("Spectra Overlay")
     fig_spec = go.Figure()
   
+    
     for name, d in data.items():
-        if ex_toggle in d["spectra"]:
-            fig_spec.add_trace(go.Scatter(
-                x=d["wavelengths"],
-                y=d["spectra"][ex_toggle],
-                name=name
-            ))
+        ex_actual = min(d["spectra"].keys(), key=lambda k: abs(k - ex_toggle))
+    
+        fig_spec.add_trace(go.Scatter(
+            x=d["wavelengths"],
+            y=d["spectra"][ex_actual],
+            name=name
+        ))
+
     fig_spec.update_layout(
         title=f"Fluorescence Emission Spectra (Ex = {ex_toggle} nm)",
         xaxis_title="Emission Wavelength (nm)",
@@ -404,12 +455,10 @@ if page == "AUC Analysis":
     selected = st.selectbox("Dataset", list(data.keys()))
     d = data[selected]
 
-    if ex_toggle not in d["spectra"]:
-        st.warning("No excitation data")
-        st.stop()
+    ex_actual = min(d["spectra"].keys(), key=lambda k: abs(k - ex_toggle))
 
     wl = d["wavelengths"]
-    y = d["spectra"][ex_toggle]
+    y = d["spectra"][ex_actual]
 
     start_wl = st.number_input("Start WL", value=float(min(wl)+20))
     end_wl = st.number_input("End WL", value=float(max(wl)-20))
@@ -439,11 +488,10 @@ if page == "AUC Analysis":
 
         for name, dataset in data.items():
 
-            if ex_toggle not in dataset["spectra"]:
-                continue
+            ex_actual = min(dataset["spectra"].keys(), key=lambda k: abs(k - ex_toggle))
 
             wl_f = dataset["wavelengths"]
-            y_f = dataset["spectra"][ex_toggle]
+            y_f = dataset["spectra"][ex_actual]
 
             mask = (wl_f >= start_wl) & (wl_f <= end_wl)
             if not np.any(mask):
