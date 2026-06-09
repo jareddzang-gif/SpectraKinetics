@@ -145,6 +145,7 @@ if page == "APIES Dashboard":
                 name=name
             ))
     fig_spec.update_layout(
+        title=f"Fluorescence Emission Spectra (Ex = {ex_toggle} nm)",
         xaxis_title="Emission Wavelength (nm)",
         yaxis_title="Fluorescence Intensity (Counts/µA)",
         template="plotly_white"
