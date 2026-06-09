@@ -288,6 +288,26 @@ if page == "APIES Dashboard":
 
     for i, (name, d) in enumerate(data.items()):
         wl = d["wavelengths"]
+      
+        # --- Get absorbance data for Aggregation Index ---
+        abs_pair = data_raw.get(name, {})
+        
+        if "abs" in abs_pair:
+            wl_abs = abs_pair["abs"]["wavelengths"]
+            abs_vals = list(abs_pair["abs"]["spectra"].values())[0]
+        
+            if wl_abs[0] > wl_abs[-1]:
+                wl_abs = wl_abs[::-1]
+                abs_vals = abs_vals[::-1]
+        
+            A280 = np.interp(280, wl_abs, abs_vals)
+            A350 = np.interp(350, wl_abs, abs_vals)
+        
+            denom = A280 - A350
+            agg_index = (A350 / denom) * 100 if abs(denom) > 1e-9 else np.nan
+        else:
+            agg_index = np.nan
+
         
 # match nearest excitation (handles float issues)
         ex_actual = min(d["spectra"].keys(), key=lambda k: abs(k - ex_toggle))
@@ -316,6 +336,7 @@ if page == "APIES Dashboard":
             "Index": i,
             "IR/IF (AUC)": irif_auc,
             "I350/I330": ratio,
+            "Aggregation Index": agg_index,
             "AUC IR": auc_ir,
             "AUC IF": auc_if
         })
@@ -456,6 +477,63 @@ if page == "APIES Dashboard":
     )
 
     st.plotly_chart(fig, use_container_width=True)
+    
+    # =====================
+    # ✅ PAPER-STYLE APIES PLOTS
+    # =====================
+    from plotly.subplots import make_subplots
+    
+    st.subheader("APIES Metrics vs Time (Paper Style)")
+    
+    fig_stack = make_subplots(
+        rows=3, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
+        subplot_titles=(
+            "IR/IF (Aggregation)",
+            "I350/I330 (Structure)",
+            "Aggregation Index (Absorbance)"
+        )
+    )
+    
+    # --- IR/IF ---
+    fig_stack.add_trace(
+        go.Scatter(
+            x=x_vals,
+            y=df["IR/IF (AUC)"],
+            mode="lines+markers"
+        ),
+        row=1, col=1
+    )
+    
+    # --- I350/I330 ---
+    fig_stack.add_trace(
+        go.Scatter(
+            x=x_vals,
+            y=df["I350/I330"],
+            mode="lines+markers"
+        ),
+        row=2, col=1
+    )
+    
+    # --- Aggregation Index ---
+    fig_stack.add_trace(
+        go.Scatter(
+            x=x_vals,
+            y=df["Aggregation Index"],
+            mode="lines+markers"
+        ),
+        row=3, col=1
+    )
+    
+    fig_stack.update_layout(
+        height=750,
+        template="plotly_white",
+        showlegend=False,
+        xaxis_title="Time / Sample"
+    )
+    
+    st.plotly_chart(fig_stack, use_container_width=True)
 
     # ✅ AUC COMPONENTS PANEL
     st.subheader("AUC Components")
