@@ -11,7 +11,7 @@ st.set_page_config(page_title='SpectraKinetics v17', layout='wide')
 page = st.sidebar.radio("Navigation",
                         ["APIES Dashboard", "AUC Analysis"])
 
-ex_toggle = st.sidebar.radio("Spectra View", [280, 260])
+ex_toggle = st.sidebar.radio("Excitation Wavelength (nm)", [280, 260])
 
 # =====================
 # ✅ TIMESTAMP EXTRACTION (YOUR FORMAT)
@@ -149,6 +149,11 @@ def apply_ife_correction(pem, abs_data):
     for ex, y in spectra.items():
 
         A_em = np.interp(wl_em, wl_abs, abs_vals)
+        
+        if ex < wl_abs.min() or ex > wl_abs.max():
+            corrected[ex] = y
+            continue
+
         A_ex = np.interp(ex, wl_abs, abs_vals)
 
         factor = 10 ** ((A_ex + A_em) / 2)
@@ -241,16 +246,21 @@ if page == "APIES Dashboard":
         wl = d["wavelengths"]
         y = d["spectra"][ex_toggle]
 
-        nearest = lambda v: np.argmin(np.abs(wl - v))
 
         mask_ir = (wl >= ir_start) & (wl <= ir_end)
         mask_if = (wl >= if_start) & (wl <= if_end)
+        
+        auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir]) if np.any(mask_ir) else np.nan
+        auc_if = np.trapezoid(y[mask_if], wl[mask_if]) if np.any(mask_if) else np.nan
 
-        auc_ir = np.trapezoid(y[mask_ir], wl[mask_ir])
-        auc_if = np.trapezoid(y[mask_if], wl[mask_if])
+        
+        irif_auc = auc_ir / auc_if if np.isfinite(auc_if) and auc_if != 0 else np.nan
+        
+        idx_330 = np.argmin(np.abs(wl - 330))
+        idx_350 = np.argmin(np.abs(wl - 350))
 
-        irif_auc = auc_ir / auc_if if auc_if != 0 else np.nan
-        ratio = y[nearest(350)] / y[nearest(330)] if y[nearest(330)] != 0 else np.nan
+        ratio = y[idx_350] / y[idx_330] if y[idx_330] != 0 else np.nan
+
 
         rows.append({
             "File": name,
@@ -262,7 +272,9 @@ if page == "APIES Dashboard":
             "AUC IF": auc_if
         })
 
-    df = pd.DataFrame(rows).sort_values("Time")
+    
+    df = pd.DataFrame(rows)
+    df = df.sort_values(by="Time", na_position="last").reset_index(drop=True)
 
     st.dataframe(df, use_container_width=True)
 
@@ -295,19 +307,27 @@ if page == "APIES Dashboard":
     fig = go.Figure()
 
     y_irif = df["IR/IF (AUC)"].values
+      
+    x_num_full = np.arange(len(df))
+    valid = np.isfinite(y_irif)
 
-    # ✅ regression
-    if len(df) > 1:
-        x_num = np.arange(len(df))
-        coeffs = np.polyfit(x_num, y_irif, 1)
-        fit = np.polyval(coeffs, x_num)
+    if np.sum(valid) > 1:
+        x_num = x_num_full[valid]
+        y_clean = y_irif[valid]
 
-        ss_res = np.sum((y_irif - fit)**2)
-        ss_tot = np.sum((y_irif - np.mean(y_irif))**2)
-        r2 = 1 - ss_res/ss_tot if ss_tot != 0 else np.nan
+        coeffs = np.polyfit(x_num, y_clean, 1)
+
+        fit = np.full_like(y_irif, np.nan, dtype=float)
+        fit[valid] = np.polyval(coeffs, x_num)
+
+        ss_res = np.sum((y_clean - np.polyval(coeffs, x_num))**2)
+        ss_tot = np.sum((y_clean - np.mean(y_clean))**2)
+
+        r2 = 1 - ss_res / ss_tot if ss_tot != 0 else np.nan
     else:
         fit = y_irif
         r2 = np.nan
+
 
     # ✅ primary axis
     fig.add_trace(go.Scatter(
@@ -442,12 +462,27 @@ if page == "AUC Analysis":
         x = np.arange(len(df_auc))
         y_vals = df_auc["AUC"].values
 
-        coeffs = np.polyfit(x, y_vals, 1)
-        fit = np.polyval(coeffs, x)
+        
+        valid = np.isfinite(y_vals)
+  
+        if np.sum(valid) > 1:
+            x_clean = x[valid]
+            y_clean = y_vals[valid]
+            coeffs = np.polyfit(x_clean, y_clean, 1)
 
-        ss_res = np.sum((y_vals - fit)**2)
-        ss_tot = np.sum((y_vals - np.mean(y_vals))**2)
-        r2 = 1 - ss_res/ss_tot if ss_tot != 0 else np.nan
+            fit = np.full_like(y_vals, np.nan, dtype=float)
+            fit[valid] = np.polyval(coeffs, x_clean)
+
+            ss_res = np.sum((y_clean - np.polyval(coeffs, x_clean))**2)
+            ss_tot = np.sum((y_clean - np.mean(y_clean))**2)
+
+            r2 = 1 - ss_res/ss_tot if ss_tot != 0 else np.nan
+        else:
+            fit = y_vals
+            r2 = np.nan
+
+
+        
 
         fig_auc = go.Figure()
 
