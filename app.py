@@ -478,21 +478,22 @@ if page == "APIES Dashboard":
 
     st.plotly_chart(fig, use_container_width=True)
     
+    
     # =====================
-    # ✅ PAPER-STYLE APIES PLOTS
+    # ✅ PAPER-STYLE APIES PLOTS (IMPROVED)
     # =====================
     from plotly.subplots import make_subplots
     
-    st.subheader("APIES Metrics vs Time (Paper Style)")
+    st.subheader("APIES Metrics vs Time")
     
     fig_stack = make_subplots(
         rows=3, cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.08,
+        vertical_spacing=0.15,   # ✅ increase spacing
         subplot_titles=(
-            "IR/IF (Aggregation)",
-            "I350/I330 (Structure)",
-            "Aggregation Index (Absorbance)"
+            "IR/IF Ratio",
+            "I350/I330 Ratio",
+            "Aggregation Index"
         )
     )
     
@@ -501,7 +502,8 @@ if page == "APIES Dashboard":
         go.Scatter(
             x=x_vals,
             y=df["IR/IF (AUC)"],
-            mode="lines+markers"
+            mode="lines+markers",
+            name="IR/IF"
         ),
         row=1, col=1
     )
@@ -511,7 +513,8 @@ if page == "APIES Dashboard":
         go.Scatter(
             x=x_vals,
             y=df["I350/I330"],
-            mode="lines+markers"
+            mode="lines+markers",
+            name="I350/I330"
         ),
         row=2, col=1
     )
@@ -521,40 +524,27 @@ if page == "APIES Dashboard":
         go.Scatter(
             x=x_vals,
             y=df["Aggregation Index"],
-            mode="lines+markers"
+            mode="lines+markers",
+            name="Agg Index"
         ),
         row=3, col=1
     )
     
+    # ✅ Axis labels + units
+    fig_stack.update_yaxes(title_text="IR/IF ", row=1, col=1)
+    fig_stack.update_yaxes(title_text="I350/I330 ", row=2, col=1)
+    fig_stack.update_yaxes(title_text="Agg Index (%)", row=3, col=1)
+    
+    # ✅ Only bottom x-axis gets label
+    fig_stack.update_xaxes(title_text="Time / Sample Index", row=3, col=1)
+    
     fig_stack.update_layout(
-        height=750,
+        height=900,              # ✅ taller to avoid crowding
         template="plotly_white",
-        showlegend=False,
-        xaxis_title="Time / Sample"
+        showlegend=False
     )
     
     st.plotly_chart(fig_stack, use_container_width=True)
-
-    # ✅ AUC COMPONENTS PANEL
-    st.subheader("AUC Components")
-
-    fig_auc = go.Figure()
-
-    fig_auc.add_trace(go.Scatter(
-        x=x_vals,
-        y=df["AUC IR"],
-        name="AUC IR",
-        mode="lines+markers"
-    ))
-
-    fig_auc.add_trace(go.Scatter(
-        x=x_vals,
-        y=df["AUC IF"],
-        name="AUC IF",
-        mode="lines+markers"
-    ))
-
-    st.plotly_chart(fig_auc, use_container_width=True)
 
 # =====================
 # ✅ AUC ANALYSIS (FIXED)
