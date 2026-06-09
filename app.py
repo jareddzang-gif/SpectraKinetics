@@ -356,6 +356,87 @@ if page == "APIES Dashboard":
     )
     
     st.plotly_chart(fig_spec, use_container_width=True)
+ # aBSORBANCE
+    st.subheader("Absorbance Overlay")
+    
+    fig_abs = go.Figure()
+    
+    for name, pair in data_raw.items():
+        if "abs" not in pair:
+            continue
+    
+        abs_data = pair["abs"]
+    
+        wl_abs = abs_data["wavelengths"]
+        abs_vals = list(abs_data["spectra"].values())[0]
+    
+        # ensure sorted
+        if wl_abs[0] > wl_abs[-1]:
+            wl_abs = wl_abs[::-1]
+            abs_vals = abs_vals[::-1]
+    
+        fig_abs.add_trace(go.Scatter(
+            x=wl_abs,
+            y=abs_vals,
+            name=name
+        ))
+    
+    fig_abs.update_layout(
+        title="Absorbance Spectra",
+        xaxis_title="Wavelength (nm)",
+        yaxis_title="Absorbance",
+        template="plotly_white"
+    )
+    
+    st.plotly_chart(fig_abs, use_container_width=True)
+  
+  # Fluorescence vs Absorbance
+  
+    st.subheader("Fluorescence vs Absorbance")
+    
+    fig_combo = go.Figure()
+    
+    for name, d in data.items():
+    
+        wl = d["wavelengths"]
+        ex_actual = min(d["spectra"].keys(), key=lambda k: abs(k - ex_toggle))
+        y = d["spectra"][ex_actual]
+    
+        fig_combo.add_trace(go.Scatter(
+            x=wl,
+            y=y,
+            name=f"{name} (Fluor)",
+            yaxis="y1"
+        ))
+    
+        abs_pair = data_raw.get(name, {})
+        if "abs" in abs_pair:
+    
+            wl_abs = abs_pair["abs"]["wavelengths"]
+            abs_vals = list(abs_pair["abs"]["spectra"].values())[0]
+    
+            if wl_abs[0] > wl_abs[-1]:
+                wl_abs = wl_abs[::-1]
+                abs_vals = abs_vals[::-1]
+    
+            fig_combo.add_trace(go.Scatter(
+                x=wl_abs,
+                y=abs_vals,
+                name=f"{name} (Abs)",
+                yaxis="y2",
+                line=dict(dash="dot")
+            ))
+    
+    fig_combo.update_layout(
+        title="Fluorescence vs Absorbance",
+        xaxis_title="Wavelength (nm)",
+        yaxis=dict(title="Fluorescence"),
+        yaxis2=dict(title="Absorbance", overlaying="y", side="right"),
+        template="plotly_white"
+    )
+    
+    st.plotly_chart(fig_combo, use_container_width=True)
+
 
     # =====================
     # ✅ APIES MULTI-AXIS + REGRESSION
