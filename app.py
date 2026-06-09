@@ -28,56 +28,188 @@ def extract_time(name):
 # =====================
 # PARSER
 # =====================
+
 def parse_file(file_bytes, filename):
 
     content = file_bytes.decode("utf-8", errors="replace").splitlines()
-
-    spectra, wavelengths, ex_vals = {}, [], []
-
+# ---------- CASE 0: ATEEM HEADER FORMAT ----------
     for i, line in enumerate(content):
         if "excitation wavelength" in line.lower():
-            ex_vals = [float(v) for v in line.split("\t")[2:] if v]
-        if line.split("\t")[0].isdigit():
-            start = i
-            break
 
-    matrix = []
+            parts = re.split(r"\s+|\t+", line.strip())
+            ex_vals = []
 
-    for line in content[start:]:
-        parts = line.split("\t")
+            for val in parts[2:]:
+                try:
+                    ex_vals.append(float(val))
+                except:
+                    continue
+
+            wavelengths, matrix = [], []
+
+            for line in content[i+1:]:
+                parts = re.split(r"\s+|\t+", line.strip())
+
+                if len(parts) < 3:
+                    continue
+
+                try:
+                    wavelengths.append(float(parts[1]))
+                    matrix.append([float(x) for x in parts[2:2+len(ex_vals)]])
+                except:
+                    continue
+
+            matrix = np.array(matrix)
+
+            spectra = {}
+            for j, ex in enumerate(ex_vals):
+                spectra[ex] = matrix[:, j]
+
+            return {
+                "wavelengths": np.array(wavelengths),
+                "spectra": spectra,
+                "filename": filename
+            }
+
+  
+
+    # ---------- CASE 1: SIMPLE 2-COLUMN (IFEABS) ----------
+    test = re.split(r"\s+|\t+", content[0].strip())
+    if len(test) == 2:
+        wavelengths, values = [], []
+
+        for line in content:
+            parts = re.split(r"\s+|\t+", line.strip())
+            if len(parts) >= 2:
+                try:
+                    wavelengths.append(float(parts[0]))
+                    values.append(float(parts[1]))
+                except:
+                    continue
+
+        return {
+            "wavelengths": np.array(wavelengths),
+            "spectra": {0: np.array(values)},
+            "filename": filename
+        }
+
+    # ---------- CASE 2: COLUMN HEADER FORMAT (IFEPEM) ----------
+    header = re.split(r"\s+|\t+", content[0].strip())
+
+    ex_vals = []
+    for val in header[1:]:
         try:
-            wavelengths.append(float(parts[1]))
-            matrix.append([float(x) for x in parts[2:2+len(ex_vals)]])
+            ex_vals.append(float(val))
         except:
             continue
 
-    matrix = np.array(matrix)
+    if len(ex_vals) > 0:
+        wavelengths, matrix = [], []
 
-    for j, ex in enumerate(ex_vals):
-        spectra[ex] = matrix[:, j]
+        for line in content[2:]:  # skip header + unit row
+            parts = re.split(r"\s+|\t+", line.strip())
+            if len(parts) < len(ex_vals) + 1:
+                continue
+            try:
+                wavelengths.append(float(parts[0]))
+                matrix.append([float(x) for x in parts[1:1+len(ex_vals)]])
+            except:
+                continue
 
+        matrix = np.array(matrix)
+
+        spectra = {}
+        for j, ex in enumerate(ex_vals):
+            spectra[ex] = matrix[:, j]
+
+        return {
+            "wavelengths": np.array(wavelengths),
+            "spectra": spectra,
+            "filename": filename
+        }
+
+    # ---------- FALLBACK ----------
     return {
-        "wavelengths": np.array(wavelengths),
-        "spectra": spectra,
+        "wavelengths": np.array([]),
+        "spectra": {},
         "filename": filename
     }
+
+
+def apply_ife_correction(pem, abs_data):
+
+    wl_em = pem["wavelengths"]
+    spectra = pem["spectra"]
+
+    wl_abs = abs_data["wavelengths"]
+    abs_vals = list(abs_data["spectra"].values())[0]
+
+    corrected = {}
+
+    for ex, y in spectra.items():
+
+        A_em = np.interp(wl_em, wl_abs, abs_vals)
+        A_ex = np.interp(ex, wl_abs, abs_vals)
+
+        factor = 10 ** ((A_ex + A_em) / 2)
+
+        corrected[ex] = y * factor
+
+    return corrected
+
 
 # =====================
 # LOAD FILES
 # =====================
-files = st.sidebar.file_uploader("Upload", type=["txt"], accept_multiple_files=True)
+
+files = st.sidebar.file_uploader("Upload", type=["txt", "dat"], accept_multiple_files=True)
 
 if files:
     st.session_state.datasets = {}
-    for i, f in enumerate(files):
-        parsed = parse_file(f.read(), f.name)
-        st.session_state.datasets[f"{parsed['filename']}_{i}"] = parsed
 
-data = st.session_state.get("datasets", {})
+    for f in files:
+        name = f.name
+        parsed = parse_file(f.read(), name)
+
+        if "IFEPEM" in name:
+            key = re.sub(r"_EEM_IFE(P|A)BS|_EEM_IFEPEM", "", name)
+            st.session_state.datasets.setdefault(key, {})["pem"] = parsed
+
+        elif "IFEABS" in name:
+            key = re.sub(r"_EEM_IFE(P|A)BS|_EEM_IFEPEM", "", name)
+            st.session_state.datasets.setdefault(key, {})["abs"] = parsed
+
+        else:
+            # handle standalone datasets (ATEEM files)
+            key = name
+            st.session_state.datasets[key] = {"pem": parsed}
+
+data_raw = st.session_state.get("datasets", {})
+
+data = {}
+
+for name, pair in data_raw.items():
+
+    if "pem" not in pair:
+        continue
+
+    pem = pair["pem"]
+
+    if "abs" in pair:
+        spectra = apply_ife_correction(pem, pair["abs"])
+    else:
+        spectra = pem["spectra"]
+
+    data[name] = {
+        "wavelengths": pem["wavelengths"],
+        "spectra": spectra,
+        "filename": name
+    }
 
 if not data:
     st.info("Upload data to begin.")
     st.stop()
+
 
 # =====================
 # ✅ APIES DASHBOARD
