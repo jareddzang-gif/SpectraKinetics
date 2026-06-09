@@ -6,6 +6,15 @@ import numpy as np
 import plotly.graph_objects as go
 import re
 
+from io import BytesIO
+
+def dataframe_to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+    return output.getvalue()
+
+
 st.set_page_config(page_title='SpectraKinetics v17', layout='wide')
 
 page = st.sidebar.radio("Navigation",
@@ -355,6 +364,15 @@ if page == "APIES Dashboard":
 
     st.dataframe(df, use_container_width=True)
 
+    excel_data = dataframe_to_excel(df)
+    
+    st.download_button(
+        label="Download APIES Metrics (Excel)",
+        data=excel_data,
+        file_name="APIES_metrics.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
     # ✅ Spectra overlay
     st.subheader("Spectra Overlay")
     fig_spec = go.Figure()
@@ -478,6 +496,22 @@ if page == "APIES Dashboard":
 
     st.plotly_chart(fig, use_container_width=True)
     
+    df_reg = pd.DataFrame({
+        "Time / Index": x_vals,
+        "IR/IF (AUC)": df["IR/IF (AUC)"],
+        "Fit": fit,
+        "I350/I330": df["I350/I330"]
+    })
+    
+    excel_reg = dataframe_to_excel(df_reg)
+    
+    st.download_button(
+        label="Download Regression Data (Excel)",
+        data=excel_reg,
+        file_name="APIES_regression.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
     
     # =====================
     # ✅ PAPER-STYLE APIES PLOTS (IMPROVED)
@@ -545,6 +579,23 @@ if page == "APIES Dashboard":
     )
     
     st.plotly_chart(fig_stack, use_container_width=True)
+
+    # Prepare export data
+    df_export = pd.DataFrame({
+        "Time / Index": x_vals,
+        "IR/IF (AUC)": df["IR/IF (AUC)"],
+        "I350/I330": df["I350/I330"],
+        "Aggregation Index (%)": df["Aggregation Index"]
+    })
+    
+    excel_stack = dataframe_to_excel(df_export)
+    
+    st.download_button(
+        label="Download APIES Plot Data (Excel)",
+        data=excel_stack,
+        file_name="APIES_plot_data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # =====================
 # ✅ AUC ANALYSIS (FIXED)
@@ -617,6 +668,15 @@ if page == "AUC Analysis":
 
         st.dataframe(df_auc)
 
+        excel_auc_analysis = dataframe_to_excel(df_auc)
+        
+        st.download_button(
+            label="Download AUC Analysis (Excel)",
+            data=excel_auc_analysis,
+            file_name="AUC_analysis.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
         x = np.arange(len(df_auc))
         y_vals = df_auc["AUC"].values
 
@@ -659,3 +719,13 @@ if page == "AUC Analysis":
         ))
 
         st.plotly_chart(fig_auc, use_container_width=True)
+
+        df_auc_export = df_auc.copy() 
+        excel_auc = dataframe_to_excel(df_auc_export)
+        
+        st.download_button(
+            label="Download AUC Results (Excel)",
+            data=excel_auc,
+            file_name="AUC_results.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
