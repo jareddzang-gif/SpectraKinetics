@@ -1,4 +1,4 @@
-  # v17 FINAL STABLE (APIES + REGRESSION + CLEAN AUC)
+  # v 01/07/2026 FINAL STABLE (APIES + REGRESSION + CLEAN AUC)
 
 import streamlit as st
 import pandas as pd
@@ -18,7 +18,8 @@ def dataframe_to_excel(df):
 st.set_page_config(page_title='SpectraKinetics v17', layout='wide')
 
 page = st.sidebar.radio("Navigation",
-                        ["APIES Dashboard", "AUC Analysis"])
+                        ["APIES Dashboard", "AUC Analysis", "Kinetics Mode"])
+
 
 # =====================
 # ✅ TIMESTAMP EXTRACTION (YOUR FORMAT)
@@ -88,6 +89,7 @@ def parse_file(file_bytes, filename):
                 "wavelengths": wavelengths,
                 "spectra": spectra,
                 "filename": filename
+                "mode": "kinetic"
             }
         
 # ---------- CASE 0: ATEEM HEADER FORMAT ----------
@@ -127,6 +129,8 @@ def parse_file(file_bytes, filename):
                 "wavelengths": np.array(wavelengths),
                 "spectra": spectra,
                 "filename": filename
+                "mode": "spectral"
+
             }
 
   
@@ -149,6 +153,8 @@ def parse_file(file_bytes, filename):
             "wavelengths": np.array(wavelengths),
             "spectra": {0: np.array(values)},
             "filename": filename
+            "mode": "spectral"
+
         }
 
 
@@ -214,6 +220,8 @@ def parse_file(file_bytes, filename):
             "wavelengths": wavelengths,
             "spectra": spectra,
             "filename": filename
+            "mode": "spectral"
+
         }
 
 
@@ -222,6 +230,8 @@ def parse_file(file_bytes, filename):
         "wavelengths": np.array([]),
         "spectra": {},
         "filename": filename
+        "mode": "spectral"
+
     }
 
 
@@ -303,6 +313,7 @@ for name, pair in data_raw.items():
         "wavelengths": pem["wavelengths"],
         "spectra": spectra,
         "filename": name
+        "mode": pem.get("mode", "unknown")
     }
 
 if not data:
@@ -780,3 +791,122 @@ if page == "AUC Analysis":
             file_name="AUC_results.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+# =====================
+# ✅ TRUE KINETICS MODE
+# =====================
+if page == "Kinetics Mode":
+
+    st.title("Kinetics Analysis (Intensity vs Time)")
+
+    # ✅ filter only kinetic datasets
+    kinetic_data = {
+        name: d for name, d in data.items()
+        if d.get("mode") == "kinetic"
+    }
+
+    if not kinetic_data:
+        st.warning("No kinetic (KinSpec) datasets loaded.")
+        st.stop()
+
+    selected = st.selectbox("Dataset", list(kinetic_data.keys()))
+    d = kinetic_data[selected]
+
+    wl = d["wavelengths"]
+    spectra = d["spectra"]   # keys = time, values = spectra
+
+    times = np.array(sorted(spectra.keys()))
+
+    # ✅ wavelength selection
+    selected_wl = st.slider(
+        "Select Emission Wavelength (nm)",
+        float(min(wl)),
+        float(max(wl)),
+        float(np.median(wl))
+    )
+
+    # ✅ extract intensity vs time
+    intensities = []
+
+    idx = np.argmin(np.abs(wl - selected_wl))
+
+    for t in times:
+        intensities.append(spectra[t][idx])
+
+    intensities = np.array(intensities)
+
+    # ✅ main plot
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=times,
+        y=intensities,
+        mode="lines+markers",
+        name=f"{selected_wl:.1f} nm"
+    ))
+
+    fig.update_layout(
+        title=f"Kinetics at {selected_wl:.1f} nm",
+        xaxis_title="Time (s)",
+        yaxis_title="Fluorescence Intensity",
+        template="plotly_white"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # =====================
+    # ✅ MULTI-WAVELENGTH TRACKING
+    # =====================
+    st.subheader("Multi-Wavelength Tracking")
+
+    wl_points = st.text_input(
+        "Enter wavelengths (comma-separated)",
+        "330,350,370"
+    )
+
+    try:
+        wl_list = [float(x.strip()) for x in wl_points.split(",")]
+
+        fig_multi = go.Figure()
+
+        for w in wl_list:
+
+            idx = np.argmin(np.abs(wl - w))
+            series = [spectra[t][idx] for t in times]
+
+            fig_multi.add_trace(go.Scatter(
+                x=times,
+                y=series,
+                mode="lines",
+                name=f"{w} nm"
+            ))
+
+        fig_multi.update_layout(
+            title="Kinetics at Multiple Wavelengths",
+            xaxis_title="Time (s)",
+            yaxis_title="Intensity",
+            template="plotly_white"
+        )
+
+        st.plotly_chart(fig_multi, use_container_width=True)
+
+    except:
+        st.info("Enter valid numeric wavelengths")
+
+    # =====================
+    # ✅ EXPORT DATA
+    # =====================
+    df_out = pd.DataFrame({"Time (s)": times})
+
+    # add selected wavelength
+    df_out[f"{selected_wl:.1f} nm"] = intensities
+
+    excel_bytes = dataframe_to_excel(df_out)
+
+    st.download_button(
+        label="Download Kinetics Data",
+        data=excel_bytes,
+        file_name="kinetics_data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
