@@ -341,11 +341,13 @@ def apply_ife_correction(pem, abs_data):
 # =====================
 
 
+
 files = st.sidebar.file_uploader(
-    "Upload",
-    type=["txt", "dat", "xlsx"],
-    accept_multiple_files=True
+    "Upload files",
+    accept_multiple_files=True,
+    key="file_uploader_main"
 )
+
 
 
 if files:
