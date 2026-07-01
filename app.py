@@ -76,16 +76,16 @@ def parse_file(file_bytes, filename):
             # decide which is wavelength vs intensity
             if wavelengths is None:
                 wavelengths = c1.values
-                spectra[spec_idx] = c2.values
+                spectra[float(spec_idx)] = c2.values
                 spec_idx += 1
 
             else:
                 if np.allclose(c1.values, wavelengths, rtol=1e-3, atol=1e-3):
-                    spectra[spec_idx] = c2.values
+                    spectra[float(spec_idx)] = c2.values
                     spec_idx += 1
 
                 elif np.allclose(c2.values, wavelengths, rtol=1e-3, atol=1e-3):
-                    spectra[spec_idx] = c1.values
+                    spectra[float(spec_idx)] = c1.values
                     spec_idx += 1
 
             i += 2
