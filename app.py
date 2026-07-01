@@ -460,7 +460,7 @@ if page == "APIES Dashboard":
 
         
 # match nearest excitation (handles float issues)
-        
+
         keys = list(d["spectra"].keys())
         numeric_keys = [k for k in keys if isinstance(k, (int, float))]
 
@@ -472,6 +472,7 @@ if page == "APIES Dashboard":
             ex_actual = numeric_keys[0]
         else:
             ex_actual = min(numeric_keys, key=lambda k: abs(k - ex_toggle))
+
           
         y = d["spectra"][ex_actual]
 
@@ -545,12 +546,6 @@ if page == "APIES Dashboard":
         else:
             ex_actual = min(numeric_keys, key=lambda k: abs(k - ex_toggle))
 
-
-        # Excel datasets behave like replicates → just use first
-        if d.get("mode") == "spectral" and len(numeric_keys) < 5:
-            ex_actual = numeric_keys[0]
-        else:
-            ex_actual = min(numeric_keys, key=lambda k: abs(k - ex_toggle))
     
         fig_spec.add_trace(go.Scatter(
             x=d["wavelengths"],
@@ -784,20 +779,19 @@ if page == "AUC Analysis":
     selected = st.selectbox("Dataset", list(data.keys()))
     d = data[selected]
 
+    
     keys = list(d["spectra"].keys())
+    numeric_keys = [k for k in keys if isinstance(k, (int, float))]
 
-        # ensure keys are numeric
-        numeric_keys = [k for k in keys if isinstance(k, (int, float))]
+    if len(numeric_keys) == 0:
+        st.warning("No valid spectra")
+        st.stop()
 
-        if len(numeric_keys) == 0:
-            st.warning(f"No valid spectra in {name}")
-            continue
+    if d.get("mode") == "spectral" and len(numeric_keys) < 5:
+        ex_actual = numeric_keys[0]
+    else:
+        ex_actual = min(numeric_keys, key=lambda k: abs(k - ex_toggle))
 
-        # Excel datasets behave like replicates → just use first
-        if d.get("mode") == "spectral" and len(numeric_keys) < 5:
-            ex_actual = numeric_keys[0]
-        else:
-            ex_actual = min(numeric_keys, key=lambda k: abs(k - ex_toggle))
     wl = d["wavelengths"]
     y = d["spectra"][ex_actual]
 
