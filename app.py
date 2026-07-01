@@ -320,12 +320,23 @@ if not data:
     st.info("Upload data to begin.")
     st.stop()
   
-# ✅ build excitation selector dynamically
+
+# detect if any dataset is kinetic
+is_kinetic = any(d.get("mode") == "kinetic" for d in data.values())
+
 all_ex = sorted({
-    int(round(ex))
+    float(ex)
     for d in data.values()
     for ex in d["spectra"].keys()
 })
+
+if page == "Kinetics Mode" and is_kinetic:
+    label = "Time (s)"
+else:
+    label = "Excitation Wavelength (nm)"
+
+ex_toggle = st.sidebar.selectbox(label, all_ex)
+
 
 
 ex_toggle = st.sidebar.selectbox(
@@ -450,7 +461,12 @@ if page == "APIES Dashboard":
         ))
 
     fig_spec.update_layout(
-        title=f"Fluorescence Emission Spectra (Ex = {ex_toggle} nm)",
+        
+        if is_kinetic:
+            title_txt = f"Fluorescence Spectrum (t = {ex_toggle:.1f} s)"
+        else:
+            title_txt = f"Fluorescence Emission Spectra (Ex = {ex_toggle:.0f} nm)"
+
         xaxis_title="Emission Wavelength (nm)",
         yaxis_title="Fluorescence Intensity (Counts/µA)",
         template="plotly_white"
