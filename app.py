@@ -128,7 +128,7 @@ def parse_file(file_bytes, filename):
             return {
                 "wavelengths": np.array(wavelengths),
                 "spectra": spectra,
-                "filename": filename
+                "filename": filename,
                 "mode": "spectral"
 
             }
@@ -152,7 +152,7 @@ def parse_file(file_bytes, filename):
         return {
             "wavelengths": np.array(wavelengths),
             "spectra": {0: np.array(values)},
-            "filename": filename
+            "filename": filename,
             "mode": "spectral"
 
         }
@@ -229,7 +229,7 @@ def parse_file(file_bytes, filename):
     return {
         "wavelengths": np.array([]),
         "spectra": {},
-        "filename": filename
+        "filename": filename,
         "mode": "spectral"
 
     }
