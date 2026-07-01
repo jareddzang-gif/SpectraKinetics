@@ -460,13 +460,13 @@ if page == "APIES Dashboard":
             name=name
         ))
 
-    fig_spec.update_layout(
-        
-        if is_kinetic:
-            title_txt = f"Fluorescence Spectrum (t = {ex_toggle:.1f} s)"
-        else:
-            title_txt = f"Fluorescence Emission Spectra (Ex = {ex_toggle:.0f} nm)"
 
+    if is_kinetic:
+        title_txt = f"Fluorescence Spectrum (t = {ex_toggle:.1f} s)"
+    else:
+        title_txt = f"Fluorescence Emission Spectra (Ex = {ex_toggle:.0f} nm)"
+
+    fig_spec.update_layout(
         xaxis_title="Emission Wavelength (nm)",
         yaxis_title="Fluorescence Intensity (Counts/µA)",
         template="plotly_white"
