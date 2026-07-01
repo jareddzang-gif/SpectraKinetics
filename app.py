@@ -39,6 +39,57 @@ def extract_time(name):
 def parse_file(file_bytes, filename):
 
     content = file_bytes.decode("utf-8", errors="replace").splitlines()
+# ---------- CASE KINSPEC TIME SERIES ----------
+    for i, line in enumerate(content):
+        if "kinetic time" in line.lower():
+
+            # extract time values
+            time_parts = re.split(r"\s+|\t+", content[i].strip())
+
+            times = []
+            for val in time_parts[1:]:
+                try:
+                    times.append(float(val))
+                except:
+                    continue
+
+            wavelengths = []
+            matrix = []
+
+            # read data rows
+            for line in content[i+1:]:
+                parts = re.split(r"\s+|\t+", line.strip())
+
+                if len(parts) < len(times) + 1:
+                    continue
+
+                try:
+                    # first column = wavelength (or index)
+                    wavelengths.append(float(parts[1]))
+
+                    row = []
+                    for j in range(len(times)):
+                        row.append(float(parts[j + 2]))
+
+                    matrix.append(row)
+
+                except:
+                    continue
+
+            wavelengths = np.array(wavelengths)
+            matrix = np.array(matrix)
+
+            # transpose → make time behave like excitation
+            spectra = {}
+            for j, t in enumerate(times):
+                spectra[t] = matrix[:, j]
+
+            return {
+                "wavelengths": wavelengths,
+                "spectra": spectra,
+                "filename": filename
+            }
+        
 # ---------- CASE 0: ATEEM HEADER FORMAT ----------
     for i, line in enumerate(content):
         if "excitation wavelength" in line.lower():
