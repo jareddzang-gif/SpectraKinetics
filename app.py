@@ -88,7 +88,7 @@ def parse_file(file_bytes, filename):
             return {
                 "wavelengths": wavelengths,
                 "spectra": spectra,
-                "filename": filename
+                "filename": filename,
                 "mode": "kinetic"
             }
         
@@ -219,7 +219,7 @@ def parse_file(file_bytes, filename):
         return {
             "wavelengths": wavelengths,
             "spectra": spectra,
-            "filename": filename
+            "filename": filename,
             "mode": "spectral"
 
         }
