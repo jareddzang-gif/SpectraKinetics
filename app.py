@@ -37,9 +37,78 @@ def extract_time(name):
 # PARSER
 # =====================
 
+
+
 def parse_file(file_bytes, filename):
 
+    # ---------- CASE EXCEL (.xlsx) ----------
+    if filename.lower().endswith(".xlsx"):
+
+        df = pd.read_excel(BytesIO(file_bytes))
+
+        # drop empty columns
+        df = df.dropna(axis=1, how="all")
+
+        cols = df.columns.tolist()
+
+        spectra = {}
+        wavelengths = None
+        spec_idx = 1
+
+        i = 0
+
+        while i < len(cols) - 1:
+
+            col1 = cols[i]
+            col2 = cols[i + 1]
+
+            col1_data = df[col1]
+            col2_data = df[col2]
+
+            # try to interpret as numeric
+            try:
+                c1 = col1_data.astype(float)
+                c2 = col2_data.astype(float)
+            except:
+                i += 1
+                continue
+
+            # decide which is wavelength vs intensity
+            if wavelengths is None:
+                wavelengths = c1.values
+                spectra[spec_idx] = c2.values
+                spec_idx += 1
+
+            else:
+                if np.allclose(c1.values, wavelengths, rtol=1e-3, atol=1e-3):
+                    spectra[spec_idx] = c2.values
+                    spec_idx += 1
+
+                elif np.allclose(c2.values, wavelengths, rtol=1e-3, atol=1e-3):
+                    spectra[spec_idx] = c1.values
+                    spec_idx += 1
+
+            i += 2
+
+        # safety fallback
+        if wavelengths is None or len(spectra) == 0:
+            return {
+                "wavelengths": np.array([]),
+                "spectra": {},
+                "filename": filename,
+                "mode": "unknown"
+            }
+
+        return {
+            "wavelengths": wavelengths,
+            "spectra": spectra,
+            "filename": filename,
+            "mode": "spectral"
+        }
+
+    # ---------- CONTINUE WITH TXT PARSER ----------
     content = file_bytes.decode("utf-8", errors="replace").splitlines()
+
 # ---------- CASE KINSPEC TIME SERIES ----------
     for i, line in enumerate(content):
         if "kinetic time" in line.lower():
@@ -61,7 +130,7 @@ def parse_file(file_bytes, filename):
             for line in content[i+1:]:
                 parts = re.split(r"\s+|\t+", line.strip())
 
-                if len(parts) < len(times) + 1:
+                if len(parts) < len(times) + 2:
                     continue
 
                 try:
@@ -271,7 +340,13 @@ def apply_ife_correction(pem, abs_data):
 # LOAD FILES
 # =====================
 
-files = st.sidebar.file_uploader("Upload", type=["txt", "dat"], accept_multiple_files=True)
+
+files = st.sidebar.file_uploader(
+    "Upload",
+    type=["txt", "dat", "xlsx"],
+    accept_multiple_files=True
+)
+
 
 if files:
     st.session_state.datasets = {}
