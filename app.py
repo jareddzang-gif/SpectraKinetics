@@ -337,15 +337,6 @@ else:
 
 ex_toggle = st.sidebar.selectbox(label, all_ex)
 
-
-
-ex_toggle = st.sidebar.selectbox(
-    "Excitation Wavelength (nm)",
-    all_ex
-)
-
-
-
 # =====================
 # ✅ APIES DASHBOARD
 # =====================
@@ -467,6 +458,7 @@ if page == "APIES Dashboard":
         title_txt = f"Fluorescence Emission Spectra (Ex = {ex_toggle:.0f} nm)"
 
     fig_spec.update_layout(
+        title=title_txt,
         xaxis_title="Emission Wavelength (nm)",
         yaxis_title="Fluorescence Intensity (Counts/µA)",
         template="plotly_white"
