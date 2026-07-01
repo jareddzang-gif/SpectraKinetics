@@ -312,7 +312,7 @@ for name, pair in data_raw.items():
     data[name] = {
         "wavelengths": pem["wavelengths"],
         "spectra": spectra,
-        "filename": name
+        "filename": name,
         "mode": pem.get("mode", "unknown")
     }
 
