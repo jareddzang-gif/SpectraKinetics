@@ -41,56 +41,63 @@ def extract_time(name):
 
 def parse_file(file_bytes, filename):
 
-    # ---------- CASE EXCEL (.xlsx) ----------
-    if filename.lower().endswith(".xlsx"):
+    
+    # ---------- CASE EXCEL / CSV ----------
+    if filename.lower().endswith((".xlsx", ".xls", ".csv")):
 
-        df = pd.read_excel(BytesIO(file_bytes))
+        if filename.lower().endswith(".csv"):
+            df = pd.read_csv(BytesIO(file_bytes), header=None)
+        else:
+            df = pd.read_excel(BytesIO(file_bytes), header=None)
 
-        # drop empty columns
+    # remove empty columns
         df = df.dropna(axis=1, how="all")
-
-        cols = df.columns.tolist()
 
         spectra = {}
         wavelengths = None
-        spec_idx = 1
 
-        i = 0
+        ncols = len(df.columns)
 
-        while i < len(cols) - 1:
+        for col in range(0, ncols - 1, 2):
 
-            col1 = cols[i]
-            col2 = cols[i + 1]
+        # spectrum name from first row
+            spec_name = str(df.iloc[0, col]).strip()
 
-            col1_data = df[col1]
-            col2_data = df[col2]
+            if spec_name == "" or spec_name.lower() == "nan":
+                spec_name = f"Spectrum_{(col//2)+1}"
 
-            # try to interpret as numeric
-            try:
-                c1 = col1_data.astype(float)
-                c2 = col2_data.astype(float)
-            except:
-                i += 1
+            wl_col = pd.to_numeric(
+                df.iloc[:, col],
+                errors="coerce"
+            )
+
+            int_col = pd.to_numeric(
+                df.iloc[:, col + 1],
+                errors="coerce"
+            )
+
+            valid = wl_col.notna() & int_col.notna()
+
+            wl = wl_col[valid].to_numpy()
+            intensity = int_col[valid].to_numpy()
+
+            if len(wl) < 5:
                 continue
 
-            # decide which is wavelength vs intensity
             if wavelengths is None:
-                wavelengths = c1.values
-                spectra[float(spec_idx)] = c2.values
-                spec_idx += 1
+                wavelengths = wl
 
-            else:
-                if np.allclose(c1.values, wavelengths, rtol=1e-3, atol=1e-3):
-                    spectra[float(spec_idx)] = c2.values
-                    spec_idx += 1
+            elif len(wl) == len(wavelengths):
+                if not np.allclose(
+                    wl,
+                    wavelengths,
+                    rtol=1e-3,
+                    atol=1e-3
+                ):
+                    continue
 
-                elif np.allclose(c2.values, wavelengths, rtol=1e-3, atol=1e-3):
-                    spectra[float(spec_idx)] = c1.values
-                    spec_idx += 1
+            spectra[spec_name] = intensity
 
-            i += 2
-
-        # safety fallback
         if wavelengths is None or len(spectra) == 0:
             return {
                 "wavelengths": np.array([]),
@@ -105,7 +112,6 @@ def parse_file(file_bytes, filename):
             "filename": filename,
             "mode": "spectral"
         }
-
     # ---------- CONTINUE WITH TXT PARSER ----------
     content = file_bytes.decode("utf-8", errors="replace").splitlines()
 
@@ -319,15 +325,23 @@ def apply_ife_correction(pem, abs_data):
 
     corrected = {}
 
+    
     for ex, y in spectra.items():
 
-        A_em = np.interp(wl_em, wl_abs, abs_vals)
-        
-        if ex < wl_abs.min() or ex > wl_abs.max():
+        try:
+            ex_num = float(ex)
+        except:
             corrected[ex] = y
             continue
 
-        A_ex = np.interp(ex, wl_abs, abs_vals)
+
+        A_em = np.interp(wl_em, wl_abs, abs_vals)
+        
+        if ex_num < wl_abs.min() or ex_num > wl_abs.max():
+            corrected[ex] = y
+            continue
+
+        A_ex = np.interp(ex_num, wl_abs, abs_vals)
 
         factor = 10 ** ((A_ex + A_em) / 2)
 
@@ -401,17 +415,21 @@ if not data:
 # detect if any dataset is kinetic
 is_kinetic = any(d.get("mode") == "kinetic" for d in data.values())
 
+
+
 all_ex = sorted({
-    float(ex)
+    ex
     for d in data.values()
     for ex in d["spectra"].keys()
-})
+}, key=str)
+
+
 
 if page == "Kinetics Mode" and is_kinetic:
     label = "Time (s)"
 else:
-    label = "Excitation Wavelength (nm)"
-
+    label = "Spectrum"
+  
 ex_toggle = st.sidebar.selectbox(label, all_ex)
 
 # =====================
@@ -461,17 +479,17 @@ if page == "APIES Dashboard":
         
 # match nearest excitation (handles float issues)
 
+        
         keys = list(d["spectra"].keys())
-        numeric_keys = [k for k in keys if isinstance(k, (int, float))]
 
-        if len(numeric_keys) == 0:
+        if len(keys) == 0:
             st.warning("No valid spectra")
             st.stop()
 
-        if d.get("mode") == "spectral" and len(numeric_keys) < 5:
-            ex_actual = numeric_keys[0]
+        if ex_toggle in keys:
+            ex_actual = ex_toggle
         else:
-            ex_actual = min(numeric_keys, key=lambda k: abs(k - ex_toggle))
+            ex_actual = keys[0]
 
           
         y = d["spectra"][ex_actual]
@@ -534,17 +552,17 @@ if page == "APIES Dashboard":
     
     for name, d in data.items():
         
+        
         keys = list(d["spectra"].keys())
-        numeric_keys = [k for k in keys if isinstance(k, (int, float))]
 
-        if len(numeric_keys) == 0:
-            st.warning("No valid spectra")
-            st.stop()
-  
-        if d.get("mode") == "spectral" and len(numeric_keys) < 5:
-            ex_actual = numeric_keys[0]
+        if len(keys) == 0:
+            continue
+
+        if ex_toggle in keys:
+            ex_actual = ex_toggle
         else:
-            ex_actual = min(numeric_keys, key=lambda k: abs(k - ex_toggle))
+            ex_actual = keys[0]
+
 
     
         fig_spec.add_trace(go.Scatter(
@@ -554,10 +572,11 @@ if page == "APIES Dashboard":
         ))
 
 
+    
     if is_kinetic:
-        title_txt = f"Fluorescence Spectrum (t = {ex_toggle:.1f} s)"
+        title_txt = f"Fluorescence Spectrum ({ex_toggle})"
     else:
-        title_txt = f"Fluorescence Emission Spectra (Ex = {ex_toggle:.0f} nm)"
+        title_txt = f"Fluorescence Emission Spectra ({ex_toggle})"
 
     fig_spec.update_layout(
         title=title_txt,
@@ -780,17 +799,18 @@ if page == "AUC Analysis":
     d = data[selected]
 
     
+    
     keys = list(d["spectra"].keys())
-    numeric_keys = [k for k in keys if isinstance(k, (int, float))]
 
-    if len(numeric_keys) == 0:
+    if len(keys) == 0:
         st.warning("No valid spectra")
         st.stop()
 
-    if d.get("mode") == "spectral" and len(numeric_keys) < 5:
-        ex_actual = numeric_keys[0]
+    if ex_toggle in keys:
+        ex_actual = ex_toggle
     else:
-        ex_actual = min(numeric_keys, key=lambda k: abs(k - ex_toggle))
+        ex_actual = keys[0]
+
 
     wl = d["wavelengths"]
     y = d["spectra"][ex_actual]
@@ -825,15 +845,14 @@ if page == "AUC Analysis":
 
             
             keys = list(dataset["spectra"].keys())
-            numeric_keys = [k for k in keys if isinstance(k, (int, float))]
 
-            if len(numeric_keys) == 0:
-               continue
+            if len(keys) == 0:
+                continue
 
-            if dataset.get("mode") == "spectral" and len(numeric_keys) < 5:
-                ex_actual = numeric_keys[0]
+            if ex_toggle in keys:
+                ex_actual = ex_toggle
             else:
-                ex_actual = min(numeric_keys, key=lambda k: abs(k - ex_toggle))
+                ex_actual = keys[0]
 
 
             wl_f = dataset["wavelengths"]
